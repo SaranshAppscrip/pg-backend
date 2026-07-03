@@ -7,8 +7,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nivas/server/internal/domain"
+	"github.com/nivas/server/internal/password"
 	"github.com/nivas/server/internal/repository"
 	"github.com/nivas/server/pkg/apperror"
+	"github.com/nivas/server/pkg/logger"
 )
 
 type TenantService struct {
@@ -34,9 +36,25 @@ type CreateTenantInput struct {
 }
 
 func (s *TenantService) Create(ctx context.Context, orgID uuid.UUID, in CreateTenantInput) (*domain.Tenant, error) {
+	log := logger.FromContext(ctx)
+	name := strings.TrimSpace(in.Name)
 	email := strings.TrimSpace(strings.ToLower(in.Email))
-	if in.Name == "" || email == "" || len(in.Password) < 6 || in.MonthlyFee < 0 {
+	if name == "" || email == "" || len(in.Password) < 6 || in.MonthlyFee < 0 {
 		return nil, apperror.BadRequest("name, email, password (min 6 chars), and monthly_fee are required")
+	}
+
+	if _, err := s.repos.Tenants.GetByEmailAndOrg(ctx, orgID, email); err == nil {
+		log.Warn("tenant create rejected", "organization_id", orgID, "email", email, "reason", "duplicate_email")
+		return nil, apperror.DuplicateEmail("Tenant")
+	} else if !apperror.IsNotFound(err) {
+		return nil, err
+	}
+
+	if _, err := s.repos.Tenants.GetByNameAndOrg(ctx, orgID, name); err == nil {
+		log.Warn("tenant create rejected", "organization_id", orgID, "name", name, "reason", "duplicate_name")
+		return nil, apperror.DuplicateName("Tenant")
+	} else if !apperror.IsNotFound(err) {
+		return nil, err
 	}
 
 	room, err := s.repos.Rooms.GetByID(ctx, orgID, in.RoomID)
@@ -49,21 +67,32 @@ func (s *TenantService) Create(ctx context.Context, orgID uuid.UUID, in CreateTe
 		return nil, err
 	}
 	if count >= room.Capacity {
-		return nil, apperror.Conflict("room is at capacity")
+		return nil, apperror.RoomAtCapacity()
 	}
 
 	var phone *string
 	if in.Phone != "" {
 		normalized := normalizePhone(in.Phone)
+		if _, err := s.repos.Tenants.GetByPhoneAndOrg(ctx, orgID, normalized); err == nil {
+			log.Warn("tenant create rejected", "organization_id", orgID, "phone", normalized, "reason", "duplicate_phone")
+			return nil, apperror.DuplicatePhone("Tenant")
+		} else if !apperror.IsNotFound(err) {
+			return nil, err
+		}
 		phone = &normalized
+	}
+
+	hash, err := password.Hash(in.Password)
+	if err != nil {
+		return nil, apperror.Internal("hash password", err)
 	}
 
 	tenant := &domain.Tenant{
 		ID:             uuid.New(),
 		OrganizationID: orgID,
-		Name:           in.Name,
+		Name:           name,
 		Email:          email,
-		PasswordHash:   hashPassword(in.Password),
+		PasswordHash:   hash,
 		Phone:          phone,
 		RoomID:         &in.RoomID,
 		MonthlyFee:     in.MonthlyFee,
@@ -76,6 +105,12 @@ func (s *TenantService) Create(ctx context.Context, orgID uuid.UUID, in CreateTe
 		return nil, err
 	}
 	tenant.PasswordHash = ""
+	log.Info("tenant created",
+		"organization_id", orgID,
+		"tenant_id", tenant.ID,
+		"email", email,
+		"room_id", in.RoomID,
+	)
 	return tenant, nil
 }
 

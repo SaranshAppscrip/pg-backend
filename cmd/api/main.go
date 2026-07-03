@@ -29,6 +29,7 @@ func main() {
 		Level:  envOr("LOG_LEVEL", "info"),
 		Format: envOr("LOG_FORMAT", "json"),
 	})
+	slog.SetDefault(log)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

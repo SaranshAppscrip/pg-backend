@@ -66,6 +66,9 @@ func (r *roomRepo) Create(ctx context.Context, room *domain.Room) error {
 func (r *roomRepo) GetByID(ctx context.Context, orgID, id uuid.UUID) (*domain.Room, error) {
 	return r.GetRoomByID(ctx, orgID, id)
 }
+func (r *roomRepo) GetByRoomNumber(ctx context.Context, orgID uuid.UUID, roomNumber string) (*domain.Room, error) {
+	return r.GetRoomByNumber(ctx, orgID, roomNumber)
+}
 func (r *roomRepo) Delete(ctx context.Context, orgID, id uuid.UUID) error {
 	return r.DeleteRoom(ctx, orgID, id)
 }
@@ -85,6 +88,12 @@ func (r *tenantRepo) GetByID(ctx context.Context, orgID, id uuid.UUID) (*domain.
 }
 func (r *tenantRepo) GetByEmailAndOrg(ctx context.Context, orgID uuid.UUID, email string) (*domain.Tenant, error) {
 	return r.GetTenantByEmailAndOrg(ctx, orgID, email)
+}
+func (r *tenantRepo) GetByPhoneAndOrg(ctx context.Context, orgID uuid.UUID, phone string) (*domain.Tenant, error) {
+	return r.GetTenantByPhoneAndOrg(ctx, orgID, phone)
+}
+func (r *tenantRepo) GetByNameAndOrg(ctx context.Context, orgID uuid.UUID, name string) (*domain.Tenant, error) {
+	return r.GetTenantByNameAndOrg(ctx, orgID, name)
 }
 func (r *tenantRepo) MoveOut(ctx context.Context, orgID, id uuid.UUID) (*domain.Tenant, error) {
 	return r.MoveOutTenant(ctx, orgID, id)
@@ -130,6 +139,9 @@ func (r *kitchenRepo) CreateItem(ctx context.Context, item *domain.KitchenItem) 
 }
 func (r *kitchenRepo) GetItem(ctx context.Context, orgID, id uuid.UUID) (*domain.KitchenItem, error) {
 	return r.GetKitchenItem(ctx, orgID, id)
+}
+func (r *kitchenRepo) GetByName(ctx context.Context, orgID uuid.UUID, name string) (*domain.KitchenItem, error) {
+	return r.GetKitchenItemByName(ctx, orgID, name)
 }
 func (r *kitchenRepo) UpdateItemQty(ctx context.Context, orgID, id uuid.UUID, qty float64) error {
 	return r.UpdateKitchenItemQty(ctx, orgID, id, qty)

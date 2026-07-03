@@ -61,6 +61,31 @@ func (s *Store) GetTenantByEmailAndOrg(ctx context.Context, orgID uuid.UUID, ema
 	return &t, nil
 }
 
+func (s *Store) GetTenantByPhoneAndOrg(ctx context.Context, orgID uuid.UUID, phone string) (*domain.Tenant, error) {
+	var t domain.Tenant
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, organization_id, name, email, phone, room_id, monthly_fee, join_date, active, created_at
+		FROM tenants WHERE organization_id = $1 AND phone = $2 AND active = true
+	`, orgID, phone).Scan(&t.ID, &t.OrganizationID, &t.Name, &t.Email, &t.Phone, &t.RoomID, &t.MonthlyFee, &t.JoinDate, &t.Active, &t.CreatedAt)
+	if err != nil {
+		return nil, mapPgError(err, "tenant not found")
+	}
+	return &t, nil
+}
+
+func (s *Store) GetTenantByNameAndOrg(ctx context.Context, orgID uuid.UUID, name string) (*domain.Tenant, error) {
+	var t domain.Tenant
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, organization_id, name, email, phone, room_id, monthly_fee, join_date, active, created_at
+		FROM tenants
+		WHERE organization_id = $1 AND lower(trim(name)) = lower(trim($2)) AND active = true
+	`, orgID, name).Scan(&t.ID, &t.OrganizationID, &t.Name, &t.Email, &t.Phone, &t.RoomID, &t.MonthlyFee, &t.JoinDate, &t.Active, &t.CreatedAt)
+	if err != nil {
+		return nil, mapPgError(err, "tenant not found")
+	}
+	return &t, nil
+}
+
 func (s *Store) MoveOutTenant(ctx context.Context, orgID, id uuid.UUID) (*domain.Tenant, error) {
 	var t domain.Tenant
 	err := s.pool.QueryRow(ctx, `

@@ -1,4 +1,4 @@
-.PHONY: run build test tidy migrate docker-up docker-down
+.PHONY: run build test tidy migrate bootstrap docker-up docker-down
 
 run:
 	go run ./cmd/api
@@ -14,7 +14,9 @@ tidy:
 
 migrate:
 	psql "$$DATABASE_URL" -f migrations/001_init.sql
-	psql "$$DATABASE_URL" -f migrations/002_organizations_auth.sql
+
+bootstrap:
+	go run ./cmd/bootstrap
 
 docker-up:
 	docker compose up -d

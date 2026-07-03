@@ -49,6 +49,19 @@ func (s *Store) GetKitchenItem(ctx context.Context, orgID, id uuid.UUID) (*domai
 	return &item, nil
 }
 
+func (s *Store) GetKitchenItemByName(ctx context.Context, orgID uuid.UUID, name string) (*domain.KitchenItem, error) {
+	var item domain.KitchenItem
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, organization_id, name, qty, unit, reorder_threshold, created_at
+		FROM kitchen_items
+		WHERE organization_id = $1 AND lower(trim(name)) = lower(trim($2))
+	`, orgID, name).Scan(&item.ID, &item.OrganizationID, &item.Name, &item.Qty, &item.Unit, &item.ReorderThreshold, &item.CreatedAt)
+	if err != nil {
+		return nil, mapPgError(err, "kitchen item not found")
+	}
+	return &item, nil
+}
+
 func (s *Store) UpdateKitchenItemQty(ctx context.Context, orgID, id uuid.UUID, qty float64) error {
 	tag, err := s.pool.Exec(ctx, `
 		UPDATE kitchen_items SET qty = $1 WHERE id = $2 AND organization_id = $3

@@ -38,6 +38,9 @@ cp .env.example .env
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/nivas?sslmode=disable
 make migrate
 
+# Create the first owner account (hashes password in Go — same as login)
+make bootstrap
+
 # Run server
 make run
 ```
@@ -54,6 +57,22 @@ Health check: `GET /health`
 | `pkg/apperror` | Typed errors with codes, HTTP status, details |
 | `pkg/response` | Uniform `{ error: { code, message } }` responses |
 
+## Logging
+
+Set in `.env`:
+
+```bash
+LOG_LEVEL=debug   # debug | info | warn | error
+LOG_FORMAT=text   # text for local dev, json for production
+```
+
+Logged automatically:
+
+- HTTP requests with `request_id`, status, duration, `user_id` / `organization_id` when authenticated
+- Handler errors with `error_code` (passwords are never logged)
+- Auth login success/failure, staff invite, tenant/room/kitchen creates
+- Database unique violations and Postgres errors
+
 ## Auth
 
 - **Staff:** organization ID + email/password → JWT (`Authorization: Bearer <token>`)
@@ -63,10 +82,12 @@ Health check: `GET /health`
 
 ### Dev seed credentials
 
-After running migrations on a fresh database:
+After `make migrate` and `make bootstrap`:
 
 | Field | Value |
 |-------|-------|
 | Organization ID | `00000000-0000-0000-0000-000000000001` |
-| Staff email | `owner@nivas.local` |
-| Staff password | `admin123` |
+| Staff email | `owner@nivas.local` (override with `BOOTSTRAP_EMAIL`) |
+| Staff password | `admin123` (override with `BOOTSTRAP_PASSWORD`) |
+
+Passwords are hashed by the bootstrap command using the same bcrypt logic as login — not stored in SQL.

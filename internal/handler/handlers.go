@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -229,6 +230,7 @@ func (h *TenantHandler) Create(c *gin.Context) {
 		MonthlyFee: req.MonthlyFee, JoinDate: joinDate,
 	})
 	if err != nil {
+		fmt.Printf("err: %v\n", err)
 		response.Error(c, err)
 		return
 	}

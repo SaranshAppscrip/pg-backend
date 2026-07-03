@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	ContextKeyClaims   = "claims"
+	ContextKeyClaims    = "claims"
 	ContextKeyRequestID = "request_id"
 )
 
@@ -34,16 +34,51 @@ func RequestID() gin.HandlerFunc {
 func Logger(log *slog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
-		c.Next()
+		requestID := c.GetString(ContextKeyRequestID)
 
-		log.Info("request",
-			"request_id", c.GetString(ContextKeyRequestID),
+		reqLog := log.With(
+			"request_id", requestID,
 			"method", c.Request.Method,
 			"path", c.Request.URL.Path,
-			"status", c.Writer.Status(),
+		)
+		ctx := logger.WithContext(c.Request.Context(), reqLog)
+		c.Request = c.Request.WithContext(ctx)
+
+		if c.Request.URL.RawQuery != "" {
+			reqLog.Debug("incoming request", "query", c.Request.URL.RawQuery)
+		}
+
+		c.Next()
+
+		status := c.Writer.Status()
+		attrs := []any{
+			"status", status,
 			"duration_ms", time.Since(start).Milliseconds(),
 			"client_ip", c.ClientIP(),
-		)
+			"bytes_written", c.Writer.Size(),
+		}
+
+		if claims := GetClaims(c); claims != nil {
+			attrs = append(attrs,
+				"user_id", claims.UserID,
+				"organization_id", claims.OrganizationID,
+				"user_type", claims.Type,
+			)
+		}
+
+		if len(c.Errors) > 0 {
+			attrs = append(attrs, "handler_errors", c.Errors.String())
+		}
+
+		msg := "request completed"
+		switch {
+		case status >= 500:
+			reqLog.Error(msg, attrs...)
+		case status >= 400:
+			reqLog.Warn(msg, attrs...)
+		default:
+			reqLog.Info(msg, attrs...)
+		}
 	}
 }
 
@@ -53,6 +88,7 @@ func Recovery(log *slog.Logger) gin.HandlerFunc {
 			if r := recover(); r != nil {
 				log.Error("panic recovered",
 					"request_id", c.GetString(ContextKeyRequestID),
+					"path", c.Request.URL.Path,
 					"panic", r,
 				)
 				response.Error(c, apperror.Internal("unexpected server error", nil))
@@ -99,8 +135,11 @@ func TenantAuth(tokens *auth.TokenService) gin.HandlerFunc {
 
 func authMiddleware(tokens *auth.TokenService, expected domain.TokenType) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		log := logger.FromContext(c.Request.Context())
+
 		token := extractBearer(c.GetHeader("Authorization"))
 		if token == "" {
+			log.Warn("auth rejected", "reason", "missing_token", "expected_type", expected)
 			response.Error(c, apperror.Unauthorized("missing authorization token"))
 			c.Abort()
 			return
@@ -108,20 +147,35 @@ func authMiddleware(tokens *auth.TokenService, expected domain.TokenType) gin.Ha
 
 		claims, err := tokens.Parse(token)
 		if err != nil {
+			log.Warn("auth rejected", "reason", "invalid_token", "expected_type", expected)
 			response.Error(c, err)
 			c.Abort()
 			return
 		}
 
 		if claims.Type != expected {
+			log.Warn("auth rejected",
+				"reason", "invalid_token_type",
+				"expected_type", expected,
+				"actual_type", claims.Type,
+				"user_id", claims.UserID,
+			)
 			response.Error(c, apperror.Forbidden("invalid token type"))
 			c.Abort()
 			return
 		}
 
 		c.Set(ContextKeyClaims, claims)
-		ctx := logger.WithContext(c.Request.Context(), slog.Default())
+
+		reqLog := log.With(
+			"user_id", claims.UserID,
+			"organization_id", claims.OrganizationID,
+			"user_type", claims.Type,
+		)
+		ctx := logger.WithContext(c.Request.Context(), reqLog)
 		c.Request = c.Request.WithContext(ctx)
+
+		log.Debug("auth ok", "user_id", claims.UserID, "user_type", claims.Type)
 		c.Next()
 	}
 }

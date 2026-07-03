@@ -49,6 +49,18 @@ func (s *Store) GetRoomByID(ctx context.Context, orgID, id uuid.UUID) (*domain.R
 	return &r, nil
 }
 
+func (s *Store) GetRoomByNumber(ctx context.Context, orgID uuid.UUID, roomNumber string) (*domain.Room, error) {
+	var r domain.Room
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, organization_id, room_number, capacity, created_at
+		FROM rooms WHERE organization_id = $1 AND room_number = $2
+	`, orgID, roomNumber).Scan(&r.ID, &r.OrganizationID, &r.RoomNumber, &r.Capacity, &r.CreatedAt)
+	if err != nil {
+		return nil, mapPgError(err, "room not found")
+	}
+	return &r, nil
+}
+
 func (s *Store) DeleteRoom(ctx context.Context, orgID, id uuid.UUID) error {
 	tag, err := s.pool.Exec(ctx, `DELETE FROM rooms WHERE id = $1 AND organization_id = $2`, id, orgID)
 	if err != nil {

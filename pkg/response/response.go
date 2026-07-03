@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/nivas/server/pkg/apperror"
+	"github.com/nivas/server/pkg/logger"
 )
 
 type errorBody struct {
@@ -13,9 +14,9 @@ type errorBody struct {
 }
 
 type errorDetail struct {
-	Code    apperror.Code        `json:"code"`
-	Message string               `json:"message"`
-	Details []map[string]string  `json:"details,omitempty"`
+	Code    apperror.Code       `json:"code"`
+	Message string              `json:"message"`
+	Details []map[string]string `json:"details,omitempty"`
 }
 
 // JSON sends a successful JSON response.
@@ -40,8 +41,12 @@ func NoContent(c *gin.Context) {
 
 // Error maps application errors to a consistent JSON error response.
 func Error(c *gin.Context, err error) {
+	_ = c.Error(err)
+
+	log := logger.FromContext(c.Request.Context())
 	var appErr *apperror.AppError
 	if errors.As(err, &appErr) {
+		logger.LogAppError(log, "handler error", appErr)
 		c.JSON(appErr.HTTPStatus, errorBody{
 			Error: errorDetail{
 				Code:    appErr.Code,
@@ -52,6 +57,7 @@ func Error(c *gin.Context, err error) {
 		return
 	}
 
+	log.Error("unhandled error", "error", err.Error())
 	c.JSON(http.StatusInternalServerError, errorBody{
 		Error: errorDetail{
 			Code:    apperror.CodeInternal,

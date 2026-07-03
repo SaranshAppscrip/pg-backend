@@ -2,12 +2,14 @@ package service
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/nivas/server/internal/domain"
 	"github.com/nivas/server/internal/repository"
 	"github.com/nivas/server/pkg/apperror"
+	"github.com/nivas/server/pkg/logger"
 )
 
 type RoomService struct {
@@ -23,9 +25,19 @@ func (s *RoomService) List(ctx context.Context, orgID uuid.UUID) ([]domain.Room,
 }
 
 func (s *RoomService) Create(ctx context.Context, orgID uuid.UUID, roomNumber string, capacity int) (*domain.Room, error) {
+	log := logger.FromContext(ctx)
+	roomNumber = strings.TrimSpace(roomNumber)
 	if roomNumber == "" || capacity < 1 {
 		return nil, apperror.BadRequest("room_number and capacity (>= 1) are required")
 	}
+
+	if _, err := s.repos.Rooms.GetByRoomNumber(ctx, orgID, roomNumber); err == nil {
+		log.Warn("room create rejected", "organization_id", orgID, "room_number", roomNumber, "reason", "duplicate_room_number")
+		return nil, apperror.DuplicateRoomNumber()
+	} else if !apperror.IsNotFound(err) {
+		return nil, err
+	}
+
 	room := &domain.Room{
 		ID:             uuid.New(),
 		OrganizationID: orgID,
@@ -36,6 +48,7 @@ func (s *RoomService) Create(ctx context.Context, orgID uuid.UUID, roomNumber st
 	if err := s.repos.Rooms.Create(ctx, room); err != nil {
 		return nil, err
 	}
+	log.Info("room created", "organization_id", orgID, "room_id", room.ID, "room_number", roomNumber, "capacity", capacity)
 	return room, nil
 }
 

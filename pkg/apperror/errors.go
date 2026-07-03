@@ -10,13 +10,18 @@ import (
 type Code string
 
 const (
-	CodeInternal       Code = "INTERNAL_ERROR"
-	CodeNotFound       Code = "NOT_FOUND"
-	CodeBadRequest     Code = "BAD_REQUEST"
-	CodeUnauthorized   Code = "UNAUTHORIZED"
-	CodeForbidden      Code = "FORBIDDEN"
-	CodeConflict       Code = "CONFLICT"
-	CodeValidation     Code = "VALIDATION_ERROR"
+	CodeInternal            Code = "INTERNAL_ERROR"
+	CodeNotFound            Code = "NOT_FOUND"
+	CodeBadRequest          Code = "BAD_REQUEST"
+	CodeUnauthorized        Code = "UNAUTHORIZED"
+	CodeForbidden           Code = "FORBIDDEN"
+	CodeConflict            Code = "CONFLICT"
+	CodeValidation          Code = "VALIDATION_ERROR"
+	CodeDuplicateEmail      Code = "DUPLICATE_EMAIL"
+	CodeDuplicatePhone      Code = "DUPLICATE_PHONE"
+	CodeDuplicateName       Code = "DUPLICATE_NAME"
+	CodeDuplicateRoomNumber Code = "DUPLICATE_ROOM_NUMBER"
+	CodeRoomAtCapacity      Code = "ROOM_AT_CAPACITY"
 )
 
 // AppError is the application's typed error with HTTP mapping.
@@ -91,6 +96,36 @@ func Conflict(msg string) *AppError {
 
 func Validation(msg string, details []map[string]string) *AppError {
 	return New(CodeValidation, msg, http.StatusBadRequest).WithDetails(details)
+}
+
+func DuplicateEmail(resource string) *AppError {
+	return New(CodeDuplicateEmail, resource+" with this email already exists", http.StatusConflict).
+		WithDetails([]map[string]string{{"field": "email", "issue": "already registered"}})
+}
+
+func DuplicatePhone(resource string) *AppError {
+	return New(CodeDuplicatePhone, resource+" with this phone number already exists", http.StatusConflict).
+		WithDetails([]map[string]string{{"field": "phone", "issue": "already registered"}})
+}
+
+func DuplicateName(resource string) *AppError {
+	return New(CodeDuplicateName, resource+" with this name already exists", http.StatusConflict).
+		WithDetails([]map[string]string{{"field": "name", "issue": "already exists"}})
+}
+
+func DuplicateRoomNumber() *AppError {
+	return New(CodeDuplicateRoomNumber, "A room with this number already exists", http.StatusConflict).
+		WithDetails([]map[string]string{{"field": "room_number", "issue": "already exists"}})
+}
+
+func RoomAtCapacity() *AppError {
+	return New(CodeRoomAtCapacity, "Room is at capacity", http.StatusConflict).
+		WithDetails([]map[string]string{{"field": "room_id", "issue": "at capacity"}})
+}
+
+// IsNotFound reports whether err is a NOT_FOUND application error.
+func IsNotFound(err error) bool {
+	return Is(err, CodeNotFound)
 }
 
 // Is checks if err is an AppError with the given code.

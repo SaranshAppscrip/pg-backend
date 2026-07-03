@@ -2,12 +2,14 @@ package service
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/nivas/server/internal/domain"
 	"github.com/nivas/server/internal/repository"
 	"github.com/nivas/server/pkg/apperror"
+	"github.com/nivas/server/pkg/logger"
 )
 
 type KitchenService struct {
@@ -30,13 +32,23 @@ type CreateKitchenItemInput struct {
 }
 
 func (s *KitchenService) CreateItem(ctx context.Context, orgID uuid.UUID, in CreateKitchenItemInput) (*domain.KitchenItem, error) {
-	if in.Name == "" {
+	log := logger.FromContext(ctx)
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
 		return nil, apperror.BadRequest("name is required")
 	}
+
+	if _, err := s.repos.GetByName(ctx, orgID, name); err == nil {
+		log.Warn("kitchen item create rejected", "organization_id", orgID, "name", name, "reason", "duplicate_name")
+		return nil, apperror.DuplicateName("Kitchen item")
+	} else if !apperror.IsNotFound(err) {
+		return nil, err
+	}
+
 	item := &domain.KitchenItem{
 		ID:               uuid.New(),
 		OrganizationID:   orgID,
-		Name:             in.Name,
+		Name:             name,
 		Qty:              in.Qty,
 		Unit:             in.Unit,
 		ReorderThreshold: in.ReorderThreshold,
@@ -45,6 +57,7 @@ func (s *KitchenService) CreateItem(ctx context.Context, orgID uuid.UUID, in Cre
 	if err := s.repos.CreateItem(ctx, item); err != nil {
 		return nil, err
 	}
+	log.Info("kitchen item created", "organization_id", orgID, "item_id", item.ID, "name", name)
 	return item, nil
 }
 
