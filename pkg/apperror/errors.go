@@ -94,6 +94,10 @@ func Conflict(msg string) *AppError {
 	return New(CodeConflict, msg, http.StatusConflict)
 }
 
+func BadGateway(msg string, err error) *AppError {
+	return Wrap(err, CodeInternal, msg, http.StatusBadGateway)
+}
+
 func Validation(msg string, details []map[string]string) *AppError {
 	return New(CodeValidation, msg, http.StatusBadRequest).WithDetails(details)
 }

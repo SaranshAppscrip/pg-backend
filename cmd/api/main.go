@@ -12,6 +12,7 @@ import (
 	"github.com/nivas/server/internal/auth"
 	"github.com/nivas/server/internal/config"
 	"github.com/nivas/server/internal/database"
+	"github.com/nivas/server/internal/notification"
 	"github.com/nivas/server/internal/repository/postgres"
 	"github.com/nivas/server/internal/router"
 	"github.com/nivas/server/internal/service"
@@ -43,8 +44,9 @@ func main() {
 
 	repos := postgres.NewStoreBundle(pool)
 	tokens := auth.NewTokenService(cfg.JWT)
+	emailSender := notification.NewEmailSender(cfg.Email, cfg.App.Env, log)
 
-	authSvc := service.NewAuthService(repos, tokens)
+	authSvc := service.NewAuthService(repos, tokens, emailSender, cfg.Email)
 	deps := router.Deps{
 		Config:   cfg,
 		Log:      log,

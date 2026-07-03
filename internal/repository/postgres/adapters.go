@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -11,6 +12,7 @@ import (
 
 type settingsRepo struct{ *Store }
 type staffRepo struct{ *Store }
+type passwordResetRepo struct{ *Store }
 type roomRepo struct{ *Store }
 type tenantRepo struct{ *Store }
 type paymentRepo struct{ *Store }
@@ -21,9 +23,10 @@ type kitchenRepo struct{ *Store }
 func NewStoreBundle(pool *pgxpool.Pool) repository.Store {
 	s := NewStore(pool)
 	return repository.Store{
-		Settings: &settingsRepo{s},
-		Staff:    &staffRepo{s},
-		Rooms:    &roomRepo{s},
+		Settings:      &settingsRepo{s},
+		Staff:         &staffRepo{s},
+		PasswordReset: &passwordResetRepo{s},
+		Rooms:         &roomRepo{s},
 		Tenants:  &tenantRepo{s},
 		Payments: &paymentRepo{s},
 		Expenses: &expenseRepo{s},
@@ -54,6 +57,23 @@ func (r *staffRepo) List(ctx context.Context, orgID uuid.UUID) ([]domain.StaffPr
 }
 func (r *staffRepo) Delete(ctx context.Context, orgID, id uuid.UUID) error {
 	return r.DeleteStaff(ctx, orgID, id)
+}
+func (r *staffRepo) UpdatePassword(ctx context.Context, staffID uuid.UUID, passwordHash string) error {
+	return r.UpdateStaffPassword(ctx, staffID, passwordHash)
+}
+
+// Password reset
+func (r *passwordResetRepo) InvalidateUnusedForStaff(ctx context.Context, staffID uuid.UUID) error {
+	return r.InvalidateUnusedPasswordResetTokens(ctx, staffID)
+}
+func (r *passwordResetRepo) Create(ctx context.Context, staffID uuid.UUID, tokenHash string, expiresAt time.Time) error {
+	return r.CreatePasswordResetToken(ctx, staffID, tokenHash, expiresAt)
+}
+func (r *passwordResetRepo) GetValidByTokenHash(ctx context.Context, tokenHash string) (uuid.UUID, error) {
+	return r.GetValidPasswordResetByTokenHash(ctx, tokenHash)
+}
+func (r *passwordResetRepo) MarkUsed(ctx context.Context, tokenHash string) error {
+	return r.MarkPasswordResetTokenUsed(ctx, tokenHash)
 }
 
 // Rooms

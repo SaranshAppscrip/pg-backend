@@ -1,8 +1,6 @@
 package password
 
 import (
-	"fmt"
-
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -11,9 +9,6 @@ func Hash(plain string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
-	fmt.Printf("hash: %s\n", string(hash))
-	fmt.Printf("plain: %s\n", plain)
 	return string(hash), nil
 }
 

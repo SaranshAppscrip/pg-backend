@@ -16,6 +16,7 @@ type Config struct {
 	Database DatabaseConfig
 	JWT      JWTConfig
 	CORS     CORSConfig
+	Email    EmailConfig
 }
 
 type AppConfig struct {
@@ -47,6 +48,14 @@ type CORSConfig struct {
 	AllowedOrigins []string
 }
 
+type EmailConfig struct {
+	ResendAPIKey     string
+	From             string
+	FrontendURL      string
+	PasswordResetTTL time.Duration
+	DevRedirectTo    string // development: send all mail here (Resend sandbox allows only account email)
+}
+
 // Load reads configuration from environment variables.
 func Load() (*Config, error) {
 	_ = godotenv.Load()
@@ -75,6 +84,13 @@ func Load() (*Config, error) {
 		},
 		CORS: CORSConfig{
 			AllowedOrigins: getEnvSlice("CORS_ALLOWED_ORIGINS", []string{"http://localhost:5173"}),
+		},
+		Email: EmailConfig{
+			ResendAPIKey:     getEnv("RESEND_API_KEY", ""),
+			From:             getEnv("EMAIL_FROM", "Nivas <onboarding@resend.dev>"),
+			FrontendURL:      getEnv("FRONTEND_URL", "http://localhost:5173"),
+			PasswordResetTTL: getEnvDuration("PASSWORD_RESET_TTL", time.Hour),
+			DevRedirectTo:    getEnv("EMAIL_DEV_REDIRECT_TO", ""),
 		},
 	}
 

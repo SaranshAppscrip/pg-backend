@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nivas/server/internal/domain"
@@ -18,6 +19,14 @@ type StaffRepository interface {
 	GetByEmailAndOrg(ctx context.Context, orgID uuid.UUID, email string) (*domain.Staff, error)
 	List(ctx context.Context, orgID uuid.UUID) ([]domain.StaffProfile, error)
 	Delete(ctx context.Context, orgID, id uuid.UUID) error
+	UpdatePassword(ctx context.Context, staffID uuid.UUID, passwordHash string) error
+}
+
+type PasswordResetRepository interface {
+	InvalidateUnusedForStaff(ctx context.Context, staffID uuid.UUID) error
+	Create(ctx context.Context, staffID uuid.UUID, tokenHash string, expiresAt time.Time) error
+	GetValidByTokenHash(ctx context.Context, tokenHash string) (staffID uuid.UUID, err error)
+	MarkUsed(ctx context.Context, tokenHash string) error
 }
 
 type RoomRepository interface {
@@ -66,9 +75,10 @@ type KitchenRepository interface {
 
 // Store aggregates all repositories.
 type Store struct {
-	Settings SettingsRepository
-	Staff    StaffRepository
-	Rooms    RoomRepository
+	Settings      SettingsRepository
+	Staff         StaffRepository
+	PasswordReset PasswordResetRepository
+	Rooms         RoomRepository
 	Tenants  TenantRepository
 	Payments PaymentRepository
 	Expenses ExpenseRepository

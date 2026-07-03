@@ -106,3 +106,16 @@ CREATE INDEX idx_payments_org ON payments(organization_id);
 CREATE INDEX idx_payments_for_month ON payments(for_month);
 CREATE INDEX idx_kitchen_log_item ON kitchen_log(item_id);
 CREATE INDEX idx_kitchen_log_org ON kitchen_log(organization_id);
+
+CREATE TABLE password_reset_tokens (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  staff_id   UUID NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at    TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX password_reset_tokens_staff_id_idx ON password_reset_tokens (staff_id);
+CREATE INDEX password_reset_tokens_token_hash_idx ON password_reset_tokens (token_hash);
+

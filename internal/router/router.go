@@ -51,6 +51,8 @@ func New(deps Deps) *gin.Engine {
 	{
 		// Public auth
 		v1.POST("/auth/staff/login", h.StaffLogin)
+		v1.POST("/auth/staff/forgot-password", h.StaffForgotPassword)
+		v1.POST("/auth/staff/reset-password", h.StaffResetPassword)
 		v1.POST("/auth/tenant/login", h.TenantLogin)
 
 		// Staff routes

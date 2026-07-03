@@ -60,6 +60,47 @@ func (h *AuthHandler) StaffLogout(c *gin.Context) {
 	response.NoContent(c)
 }
 
+type forgotPasswordRequest struct {
+	OrganizationID string `json:"organization_id"`
+	Email          string `json:"email"`
+}
+
+func (h *AuthHandler) StaffForgotPassword(c *gin.Context) {
+	var req forgotPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	orgID, err := uuid.Parse(req.OrganizationID)
+	if err != nil {
+		response.Error(c, apperror.BadRequest("invalid organization_id"))
+		return
+	}
+	if err := h.auth.StaffForgotPassword(c.Request.Context(), orgID, req.Email); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, gin.H{"message": "If an account exists, a reset email was sent"})
+}
+
+type resetPasswordRequest struct {
+	Token    string `json:"token"`
+	Password string `json:"password"`
+}
+
+func (h *AuthHandler) StaffResetPassword(c *gin.Context) {
+	var req resetPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	if err := h.auth.StaffResetPassword(c.Request.Context(), req.Token, req.Password); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, gin.H{"message": "Password updated successfully"})
+}
+
 func (h *AuthHandler) TenantLogin(c *gin.Context) {
 	var req loginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
