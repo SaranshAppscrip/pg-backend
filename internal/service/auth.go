@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -36,9 +37,12 @@ func (s *AuthService) StaffLogin(ctx context.Context, orgID uuid.UUID, email, pl
 		return nil, apperror.Unauthorized("invalid email or password")
 	}
 
+	fmt.Printf("staff.PasswordHash: %s\n", staff.PasswordHash)
+	fmt.Printf("plainPassword: %s\n", plainPassword)
+
 	if password.Compare(staff.PasswordHash, plainPassword) != nil {
 		log.Warn("staff login failed", "organization_id", orgID, "email", email, "reason", "invalid_credentials")
-		return nil, apperror.Unauthorized("invalid email or password")
+		return nil, apperror.Unauthorized("error comparing passwords")
 	}
 
 	token, err := s.tokens.GenerateStaffToken(staff)
