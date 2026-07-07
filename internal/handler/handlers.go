@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -367,7 +368,7 @@ func (h *TenantHandler) Create(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	tenant, err := h.svc.Create(c.Request.Context(), middleware.GetOrganizationID(c), service.CreateTenantInput{
+	tenant, err := h.svc.Create(c.Request.Context(), middleware.GetOrganizationID(c), middleware.GetUserID(c), service.CreateTenantInput{
 		Name: req.Name, Email: req.Email, Password: req.Password, Phone: req.Phone, RoomID: roomID,
 		MonthlyFee: req.MonthlyFee, JoinDate: joinDate,
 	})
@@ -385,7 +386,7 @@ func (h *TenantHandler) MoveOut(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	tenant, err := h.svc.MoveOut(c.Request.Context(), middleware.GetOrganizationID(c), id)
+	tenant, err := h.svc.MoveOut(c.Request.Context(), middleware.GetOrganizationID(c), middleware.GetUserID(c), id)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -437,7 +438,7 @@ func (h *PaymentHandler) Create(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	payment, err := h.svc.Create(c.Request.Context(), middleware.GetOrganizationID(c), service.CreatePaymentInput{
+	payment, err := h.svc.Create(c.Request.Context(), middleware.GetOrganizationID(c), middleware.GetUserID(c), service.CreatePaymentInput{
 		TenantID: tenantID, Amount: req.Amount, Date: date,
 		ForMonth: req.ForMonth, Mode: domain.PaymentMode(req.Mode),
 	})
@@ -454,7 +455,7 @@ func (h *PaymentHandler) Delete(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	if err := h.svc.Delete(c.Request.Context(), middleware.GetOrganizationID(c), id); err != nil {
+	if err := h.svc.Delete(c.Request.Context(), middleware.GetOrganizationID(c), middleware.GetUserID(c), id); err != nil {
 		response.Error(c, err)
 		return
 	}
@@ -512,7 +513,7 @@ func (h *ExpenseHandler) Create(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	expense, err := h.svc.Create(c.Request.Context(), middleware.GetOrganizationID(c), service.CreateExpenseInput{
+	expense, err := h.svc.Create(c.Request.Context(), middleware.GetOrganizationID(c), middleware.GetUserID(c), service.CreateExpenseInput{
 		Category: domain.ExpenseCategory(req.Category),
 		Amount:   req.Amount, Date: date, Note: req.Note,
 	})
@@ -529,7 +530,7 @@ func (h *ExpenseHandler) Delete(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	if err := h.svc.Delete(c.Request.Context(), middleware.GetOrganizationID(c), id); err != nil {
+	if err := h.svc.Delete(c.Request.Context(), middleware.GetOrganizationID(c), middleware.GetUserID(c), id); err != nil {
 		response.Error(c, err)
 		return
 	}
@@ -700,4 +701,30 @@ func (h *StaffHandler) Remove(c *gin.Context) {
 
 func (h *AuthHandler) Health(c *gin.Context) {
 	response.OK(c, gin.H{"status": "ok"})
+}
+
+type AuditHandler struct {
+	svc *service.AuditService
+}
+
+func NewAuditHandler(svc *service.AuditService) *AuditHandler {
+	return &AuditHandler{svc: svc}
+}
+
+func (h *AuditHandler) List(c *gin.Context) {
+	limit := 50
+	if raw := c.Query("limit"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil {
+			limit = n
+		}
+	}
+	logs, err := h.svc.List(c.Request.Context(), middleware.GetOrganizationID(c), limit)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if logs == nil {
+		logs = []domain.StaffAuditLog{}
+	}
+	response.OK(c, logs)
 }

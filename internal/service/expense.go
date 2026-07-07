@@ -12,10 +12,11 @@ import (
 
 type ExpenseService struct {
 	repos repository.ExpenseRepository
+	audit *AuditService
 }
 
-func NewExpenseService(repos repository.ExpenseRepository) *ExpenseService {
-	return &ExpenseService{repos: repos}
+func NewExpenseService(repos repository.ExpenseRepository, audit *AuditService) *ExpenseService {
+	return &ExpenseService{repos: repos, audit: audit}
 }
 
 func (s *ExpenseService) List(ctx context.Context, orgID uuid.UUID) ([]domain.Expense, error) {
@@ -29,7 +30,7 @@ type CreateExpenseInput struct {
 	Note     *string
 }
 
-func (s *ExpenseService) Create(ctx context.Context, orgID uuid.UUID, in CreateExpenseInput) (*domain.Expense, error) {
+func (s *ExpenseService) Create(ctx context.Context, orgID, staffID uuid.UUID, in CreateExpenseInput) (*domain.Expense, error) {
 	if in.Amount <= 0 {
 		return nil, apperror.BadRequest("amount must be positive")
 	}
@@ -45,9 +46,31 @@ func (s *ExpenseService) Create(ctx context.Context, orgID uuid.UUID, in CreateE
 	if err := s.repos.Create(ctx, expense); err != nil {
 		return nil, err
 	}
+	meta := map[string]any{
+		"amount":   expense.Amount,
+		"category": string(expense.Category),
+		"date":     expense.Date.Format("2006-01-02"),
+	}
+	if expense.Note != nil {
+		meta["note"] = *expense.Note
+	}
+	_ = s.audit.Log(ctx, orgID, staffID, domain.AuditEntityExpense, expense.ID, domain.AuditActionCreate, meta)
 	return expense, nil
 }
 
-func (s *ExpenseService) Delete(ctx context.Context, orgID, id uuid.UUID) error {
-	return s.repos.Delete(ctx, orgID, id)
+func (s *ExpenseService) Delete(ctx context.Context, orgID, staffID, id uuid.UUID) error {
+	expense, err := s.repos.SoftDelete(ctx, orgID, id)
+	if err != nil {
+		return err
+	}
+	meta := map[string]any{
+		"amount":   expense.Amount,
+		"category": string(expense.Category),
+		"date":     expense.Date.Format("2006-01-02"),
+	}
+	if expense.Note != nil {
+		meta["note"] = *expense.Note
+	}
+	_ = s.audit.Log(ctx, orgID, staffID, domain.AuditEntityExpense, expense.ID, domain.AuditActionDelete, meta)
+	return nil
 }

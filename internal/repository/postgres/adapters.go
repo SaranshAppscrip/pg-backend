@@ -20,6 +20,7 @@ type tenantRepo struct{ *Store }
 type paymentRepo struct{ *Store }
 type expenseRepo struct{ *Store }
 type kitchenRepo struct{ *Store }
+type auditRepo struct{ *Store }
 
 // NewStoreBundle wires all repository interfaces to PostgreSQL.
 func NewStoreBundle(pool *pgxpool.Pool) repository.Store {
@@ -34,7 +35,8 @@ func NewStoreBundle(pool *pgxpool.Pool) repository.Store {
 		Tenants:  &tenantRepo{s},
 		Payments: &paymentRepo{s},
 		Expenses: &expenseRepo{s},
-		Kitchen:  &kitchenRepo{s},
+		Kitchen:             &kitchenRepo{s},
+		Audit:               &auditRepo{s},
 	}
 }
 
@@ -173,8 +175,8 @@ func (r *paymentRepo) List(ctx context.Context, orgID uuid.UUID) ([]domain.Payme
 func (r *paymentRepo) Create(ctx context.Context, orgID uuid.UUID, payment *domain.Payment) error {
 	return r.CreatePayment(ctx, orgID, payment)
 }
-func (r *paymentRepo) Delete(ctx context.Context, orgID, id uuid.UUID) error {
-	return r.DeletePayment(ctx, orgID, id)
+func (r *paymentRepo) SoftDelete(ctx context.Context, orgID, id uuid.UUID) (*domain.Payment, error) {
+	return r.SoftDeletePayment(ctx, orgID, id)
 }
 func (r *paymentRepo) ListByTenant(ctx context.Context, orgID, tenantID uuid.UUID) ([]domain.Payment, error) {
 	return r.ListPaymentsByTenant(ctx, orgID, tenantID)
@@ -187,8 +189,8 @@ func (r *expenseRepo) List(ctx context.Context, orgID uuid.UUID) ([]domain.Expen
 func (r *expenseRepo) Create(ctx context.Context, expense *domain.Expense) error {
 	return r.CreateExpense(ctx, expense)
 }
-func (r *expenseRepo) Delete(ctx context.Context, orgID, id uuid.UUID) error {
-	return r.DeleteExpense(ctx, orgID, id)
+func (r *expenseRepo) SoftDelete(ctx context.Context, orgID, id uuid.UUID) (*domain.Expense, error) {
+	return r.SoftDeleteExpense(ctx, orgID, id)
 }
 
 // Kitchen
@@ -212,4 +214,12 @@ func (r *kitchenRepo) CreateLog(ctx context.Context, orgID uuid.UUID, log *domai
 }
 func (r *kitchenRepo) ListLog(ctx context.Context, orgID uuid.UUID, limit int) ([]domain.KitchenLog, error) {
 	return r.ListKitchenLog(ctx, orgID, limit)
+}
+
+// Audit
+func (r *auditRepo) Create(ctx context.Context, orgID uuid.UUID, staffID *uuid.UUID, entry *domain.StaffAuditLog) error {
+	return r.CreateStaffAuditLog(ctx, orgID, staffID, entry)
+}
+func (r *auditRepo) List(ctx context.Context, orgID uuid.UUID, limit int) ([]domain.StaffAuditLog, error) {
+	return r.ListStaffAuditLog(ctx, orgID, limit)
 }

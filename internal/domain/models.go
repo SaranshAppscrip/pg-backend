@@ -111,6 +111,7 @@ type Payment struct {
 	ForMonth  string      `json:"for_month"`
 	Mode      PaymentMode `json:"mode"`
 	CreatedAt time.Time   `json:"created_at"`
+	DeletedAt *time.Time  `json:"deleted_at,omitempty"`
 }
 
 type Expense struct {
@@ -120,6 +121,37 @@ type Expense struct {
 	Amount         float64         `json:"amount"`
 	Date           time.Time       `json:"date"`
 	Note           *string         `json:"note"`
+	CreatedAt      time.Time       `json:"created_at"`
+	DeletedAt      *time.Time      `json:"deleted_at,omitempty"`
+}
+
+// ── Audit log ────────────────────────────────────────────────────────────────
+
+type AuditEntityType string
+
+const (
+	AuditEntityPayment AuditEntityType = "payment"
+	AuditEntityExpense AuditEntityType = "expense"
+	AuditEntityTenant  AuditEntityType = "tenant"
+)
+
+type AuditAction string
+
+const (
+	AuditActionCreate  AuditAction = "create"
+	AuditActionDelete  AuditAction = "delete"
+	AuditActionMoveOut AuditAction = "move_out"
+)
+
+type StaffAuditLog struct {
+	ID             uuid.UUID       `json:"id"`
+	OrganizationID uuid.UUID       `json:"organization_id"`
+	StaffID        *uuid.UUID      `json:"staff_id"`
+	StaffEmail     string          `json:"staff_email,omitempty"`
+	EntityType     AuditEntityType `json:"entity_type"`
+	EntityID       uuid.UUID       `json:"entity_id"`
+	Action         AuditAction     `json:"action"`
+	Metadata       map[string]any  `json:"metadata"`
 	CreatedAt      time.Time       `json:"created_at"`
 }
 

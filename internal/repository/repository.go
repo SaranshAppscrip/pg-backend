@@ -70,14 +70,14 @@ type RefreshTokenRepository interface {
 type PaymentRepository interface {
 	List(ctx context.Context, orgID uuid.UUID) ([]domain.Payment, error)
 	Create(ctx context.Context, orgID uuid.UUID, payment *domain.Payment) error
-	Delete(ctx context.Context, orgID, id uuid.UUID) error
+	SoftDelete(ctx context.Context, orgID, id uuid.UUID) (*domain.Payment, error)
 	ListByTenant(ctx context.Context, orgID, tenantID uuid.UUID) ([]domain.Payment, error)
 }
 
 type ExpenseRepository interface {
 	List(ctx context.Context, orgID uuid.UUID) ([]domain.Expense, error)
 	Create(ctx context.Context, expense *domain.Expense) error
-	Delete(ctx context.Context, orgID, id uuid.UUID) error
+	SoftDelete(ctx context.Context, orgID, id uuid.UUID) (*domain.Expense, error)
 }
 
 type KitchenRepository interface {
@@ -90,16 +90,22 @@ type KitchenRepository interface {
 	ListLog(ctx context.Context, orgID uuid.UUID, limit int) ([]domain.KitchenLog, error)
 }
 
+type AuditRepository interface {
+	Create(ctx context.Context, orgID uuid.UUID, staffID *uuid.UUID, entry *domain.StaffAuditLog) error
+	List(ctx context.Context, orgID uuid.UUID, limit int) ([]domain.StaffAuditLog, error)
+}
+
 // Store aggregates all repositories.
 type Store struct {
-	Settings      SettingsRepository
-	Staff         StaffRepository
+	Settings            SettingsRepository
+	Staff               StaffRepository
 	PasswordReset       PasswordResetRepository
 	TenantPasswordReset TenantPasswordResetRepository
 	RefreshTokens       RefreshTokenRepository
 	Rooms               RoomRepository
-	Tenants  TenantRepository
-	Payments PaymentRepository
-	Expenses ExpenseRepository
-	Kitchen  KitchenRepository
+	Tenants             TenantRepository
+	Payments            PaymentRepository
+	Expenses            ExpenseRepository
+	Kitchen             KitchenRepository
+	Audit               AuditRepository
 }

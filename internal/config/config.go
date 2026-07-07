@@ -11,12 +11,13 @@ import (
 
 // Config holds all application configuration.
 type Config struct {
-	App      AppConfig
-	Server   ServerConfig
-	Database DatabaseConfig
-	JWT      JWTConfig
-	CORS     CORSConfig
-	Email    EmailConfig
+	App       AppConfig
+	Server    ServerConfig
+	Database  DatabaseConfig
+	JWT       JWTConfig
+	CORS      CORSConfig
+	Email     EmailConfig
+	RateLimit RateLimitConfig
 }
 
 type AppConfig struct {
@@ -55,6 +56,11 @@ type EmailConfig struct {
 	FrontendURL      string
 	PasswordResetTTL time.Duration
 	DevRedirectTo    string // development: send all mail here (Resend sandbox allows only account email)
+}
+
+type RateLimitConfig struct {
+	AuthLimit  int
+	AuthWindow time.Duration
 }
 
 // Load reads configuration from environment variables.
@@ -103,6 +109,10 @@ func Load() (*Config, error) {
 			FrontendURL:      getEnv("FRONTEND_URL", "http://localhost:5173"),
 			PasswordResetTTL: getEnvDuration("PASSWORD_RESET_TTL", time.Hour),
 			DevRedirectTo:    getEnv("EMAIL_DEV_REDIRECT_TO", ""),
+		},
+		RateLimit: RateLimitConfig{
+			AuthLimit:  getEnvInt("RATE_LIMIT_AUTH_REQUESTS", 10),
+			AuthWindow: getEnvDuration("RATE_LIMIT_AUTH_WINDOW", time.Minute),
 		},
 	}
 

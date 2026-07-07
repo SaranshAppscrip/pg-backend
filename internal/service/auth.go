@@ -34,6 +34,7 @@ func NewAuthService(repos repository.Store, tokens *auth.TokenService, jwtCfg co
 }
 
 func (s *AuthService) StaffLogin(ctx context.Context, email, plainPassword string, orgID *uuid.UUID) (*domain.AuthResponse, error) {
+	defer normalizeAuthLatency(time.Now())
 	log := logger.FromContext(ctx)
 	email = strings.TrimSpace(strings.ToLower(email))
 	if email == "" || len(plainPassword) < 6 {
@@ -76,6 +77,7 @@ func (s *AuthService) StaffMe(ctx context.Context, orgID, staffID uuid.UUID) (*d
 }
 
 func (s *AuthService) TenantLogin(ctx context.Context, email, plainPassword string, orgID *uuid.UUID) (*domain.TenantAuthResponse, error) {
+	defer normalizeAuthLatency(time.Now())
 	log := logger.FromContext(ctx)
 	email = strings.TrimSpace(strings.ToLower(email))
 	if email == "" || len(plainPassword) < 6 {
@@ -170,6 +172,7 @@ func (s *AuthService) InviteStaff(ctx context.Context, orgID uuid.UUID, email, p
 }
 
 func (s *AuthService) StaffForgotPassword(ctx context.Context, email string, orgID *uuid.UUID) error {
+	defer normalizeAuthLatency(time.Now())
 	log := logger.FromContext(ctx)
 	email = strings.TrimSpace(strings.ToLower(email))
 	if email == "" {
@@ -269,6 +272,7 @@ func (s *AuthService) RevokeAllStaffSessions(ctx context.Context, staffID uuid.U
 }
 
 func (s *AuthService) TenantForgotPassword(ctx context.Context, email string, orgID *uuid.UUID) error {
+	defer normalizeAuthLatency(time.Now())
 	log := logger.FromContext(ctx)
 	email = strings.TrimSpace(strings.ToLower(email))
 	if email == "" {
@@ -640,4 +644,12 @@ func tenantOrgIDs(tenants []domain.Tenant) []uuid.UUID {
 		ids[i] = t.OrganizationID
 	}
 	return ids
+}
+
+const minAuthLatency = 200 * time.Millisecond
+
+func normalizeAuthLatency(start time.Time) {
+	if d := time.Since(start); d < minAuthLatency {
+		time.Sleep(minAuthLatency - d)
+	}
 }

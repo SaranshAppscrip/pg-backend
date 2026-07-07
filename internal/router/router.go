@@ -12,17 +12,18 @@ import (
 )
 
 type Deps struct {
-	Config  *config.Config
-	Log     *slog.Logger
-	Tokens  *auth.TokenService
-	Auth    *service.AuthService
+	Config   *config.Config
+	Log      *slog.Logger
+	Tokens   *auth.TokenService
+	Auth     *service.AuthService
 	Settings *service.SettingsService
-	Rooms   *service.RoomService
-	Tenants *service.TenantService
+	Rooms    *service.RoomService
+	Tenants  *service.TenantService
 	Payments *service.PaymentService
 	Expenses *service.ExpenseService
-	Kitchen *service.KitchenService
-	Staff   *service.StaffService
+	Kitchen  *service.KitchenService
+	Staff    *service.StaffService
+	Audit    *service.AuditService
 }
 
 func New(deps Deps) *gin.Engine {
@@ -44,20 +45,26 @@ func New(deps Deps) *gin.Engine {
 	expenseH := handler.NewExpenseHandler(deps.Expenses)
 	kitchenH := handler.NewKitchenHandler(deps.Kitchen)
 	staffH := handler.NewStaffHandler(deps.Staff)
+	auditH := handler.NewAuditHandler(deps.Audit)
+
+	authRL := middleware.NewRateLimiter(deps.Config.RateLimit.AuthLimit, deps.Config.RateLimit.AuthWindow)
 
 	r.GET("/health", h.Health)
 
 	v1 := r.Group("/api/v1")
 	{
-		// Public auth
-		v1.POST("/auth/staff/login", h.StaffLogin)
-		v1.POST("/auth/staff/refresh", h.StaffRefresh)
-		v1.POST("/auth/staff/logout", h.StaffLogout)
-		v1.POST("/auth/staff/forgot-password", h.StaffForgotPassword)
-		v1.POST("/auth/staff/reset-password", h.StaffResetPassword)
-		v1.POST("/auth/tenant/login", h.TenantLogin)
-		v1.POST("/auth/tenant/refresh", h.TenantRefresh)
-		v1.POST("/auth/tenant/logout", h.TenantLogout)
+		// Public auth (rate limited)
+		authRoutes := v1.Group("", authRL.Middleware())
+		{
+			authRoutes.POST("/auth/staff/login", h.StaffLogin)
+			authRoutes.POST("/auth/staff/refresh", h.StaffRefresh)
+			authRoutes.POST("/auth/staff/logout", h.StaffLogout)
+			authRoutes.POST("/auth/staff/forgot-password", h.StaffForgotPassword)
+			authRoutes.POST("/auth/staff/reset-password", h.StaffResetPassword)
+			authRoutes.POST("/auth/tenant/login", h.TenantLogin)
+			authRoutes.POST("/auth/tenant/refresh", h.TenantRefresh)
+			authRoutes.POST("/auth/tenant/logout", h.TenantLogout)
+		}
 
 		// Staff routes
 		staff := v1.Group("", middleware.StaffAuth(deps.Tokens))
@@ -88,6 +95,8 @@ func New(deps Deps) *gin.Engine {
 			staff.POST("/kitchen/items/:id/stock-in", kitchenH.StockIn)
 			staff.POST("/kitchen/items/:id/use", kitchenH.UseStock)
 			staff.GET("/kitchen/log", kitchenH.ListLog)
+
+			staff.GET("/audit-log", auditH.List)
 
 			staff.GET("/staff", staffH.List)
 			staff.POST("/staff/invite", staffH.Invite)

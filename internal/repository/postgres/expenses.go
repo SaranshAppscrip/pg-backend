@@ -11,7 +11,9 @@ import (
 func (s *Store) ListExpenses(ctx context.Context, orgID uuid.UUID) ([]domain.Expense, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, organization_id, category, amount, date, note, created_at
-		FROM expenses WHERE organization_id = $1 ORDER BY date DESC, created_at DESC
+		FROM expenses
+		WHERE organization_id = $1 AND deleted_at IS NULL
+		ORDER BY date DESC, created_at DESC
 	`, orgID)
 	if err != nil {
 		return nil, mapPgError(err, "")
@@ -37,13 +39,15 @@ func (s *Store) CreateExpense(ctx context.Context, expense *domain.Expense) erro
 	return mapPgError(err, "")
 }
 
-func (s *Store) DeleteExpense(ctx context.Context, orgID, id uuid.UUID) error {
-	tag, err := s.pool.Exec(ctx, `DELETE FROM expenses WHERE id = $1 AND organization_id = $2`, id, orgID)
+func (s *Store) SoftDeleteExpense(ctx context.Context, orgID, id uuid.UUID) (*domain.Expense, error) {
+	var e domain.Expense
+	err := s.pool.QueryRow(ctx, `
+		UPDATE expenses SET deleted_at = NOW()
+		WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL
+		RETURNING id, organization_id, category, amount, date, note, created_at
+	`, id, orgID).Scan(&e.ID, &e.OrganizationID, &e.Category, &e.Amount, &e.Date, &e.Note, &e.CreatedAt)
 	if err != nil {
-		return mapPgError(err, "")
+		return nil, mapPgError(err, "expense not found")
 	}
-	if tag.RowsAffected() == 0 {
-		return apperror.NotFound("expense not found")
-	}
-	return nil
+	return &e, nil
 }

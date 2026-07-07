@@ -130,3 +130,44 @@ CREATE TABLE tenant_password_reset_tokens (
 
 CREATE INDEX tenant_password_reset_tokens_tenant_id_idx ON tenant_password_reset_tokens (tenant_id);
 CREATE INDEX tenant_password_reset_tokens_token_hash_idx ON tenant_password_reset_tokens (token_hash);
+
+-- Refresh tokens (from access/refresh token auth)
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_type       TEXT NOT NULL CHECK (user_type IN ('staff', 'tenant')),
+  user_id         UUID NOT NULL,
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  token_hash      TEXT NOT NULL,
+  expires_at      TIMESTAMPTZ NOT NULL,
+  revoked_at      TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS refresh_tokens_token_hash_idx ON refresh_tokens (token_hash);
+CREATE INDEX IF NOT EXISTS refresh_tokens_user_idx ON refresh_tokens (user_type, user_id);
+CREATE INDEX IF NOT EXISTS refresh_tokens_expires_at_idx ON refresh_tokens (expires_at) WHERE revoked_at IS NULL;
+
+-- Soft deletes for financial records
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS idx_payments_active ON payments (organization_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_expenses_active ON expenses (organization_id) WHERE deleted_at IS NULL;
+
+-- Staff audit trail
+CREATE TYPE audit_entity_type AS ENUM ('payment', 'expense', 'tenant');
+CREATE TYPE audit_action AS ENUM ('create', 'delete', 'move_out');
+
+CREATE TABLE staff_audit_log (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  staff_id        UUID REFERENCES staff(id) ON DELETE SET NULL,
+  entity_type     audit_entity_type NOT NULL,
+  entity_id       UUID NOT NULL,
+  action          audit_action NOT NULL,
+  metadata        JSONB NOT NULL DEFAULT '{}',
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_staff_audit_log_org ON staff_audit_log (organization_id, created_at DESC);
+CREATE INDEX idx_staff_audit_log_entity ON staff_audit_log (entity_type, entity_id);

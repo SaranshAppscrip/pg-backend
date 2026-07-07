@@ -23,6 +23,7 @@ const (
 	CodeDuplicateRoomNumber Code = "DUPLICATE_ROOM_NUMBER"
 	CodeRoomAtCapacity      Code = "ROOM_AT_CAPACITY"
 	CodeMultipleOrganizations Code = "MULTIPLE_ORGANIZATIONS"
+	CodeRateLimited           Code = "RATE_LIMITED"
 )
 
 // AppError is the application's typed error with HTTP mapping.
@@ -89,6 +90,10 @@ func Unauthorized(msg string) *AppError {
 
 func Forbidden(msg string) *AppError {
 	return New(CodeForbidden, msg, http.StatusForbidden)
+}
+
+func TooManyRequests(msg string) *AppError {
+	return New(CodeRateLimited, msg, http.StatusTooManyRequests)
 }
 
 func Conflict(msg string) *AppError {

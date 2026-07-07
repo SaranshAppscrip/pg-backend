@@ -15,10 +15,11 @@ import (
 
 type TenantService struct {
 	repos repository.Store
+	audit *AuditService
 }
 
-func NewTenantService(repos repository.Store) *TenantService {
-	return &TenantService{repos: repos}
+func NewTenantService(repos repository.Store, audit *AuditService) *TenantService {
+	return &TenantService{repos: repos, audit: audit}
 }
 
 func (s *TenantService) List(ctx context.Context, orgID uuid.UUID) ([]domain.Tenant, error) {
@@ -35,7 +36,7 @@ type CreateTenantInput struct {
 	JoinDate   time.Time
 }
 
-func (s *TenantService) Create(ctx context.Context, orgID uuid.UUID, in CreateTenantInput) (*domain.Tenant, error) {
+func (s *TenantService) Create(ctx context.Context, orgID, staffID uuid.UUID, in CreateTenantInput) (*domain.Tenant, error) {
 	log := logger.FromContext(ctx)
 	name := strings.TrimSpace(in.Name)
 	email := strings.TrimSpace(strings.ToLower(in.Email))
@@ -111,11 +112,30 @@ func (s *TenantService) Create(ctx context.Context, orgID uuid.UUID, in CreateTe
 		"email", email,
 		"room_id", in.RoomID,
 	)
+	meta := map[string]any{
+		"name":        tenant.Name,
+		"email":       tenant.Email,
+		"monthly_fee": tenant.MonthlyFee,
+		"room_id":     in.RoomID.String(),
+		"join_date":   tenant.JoinDate.Format("2006-01-02"),
+	}
+	if tenant.Phone != nil {
+		meta["phone"] = *tenant.Phone
+	}
+	_ = s.audit.Log(ctx, orgID, staffID, domain.AuditEntityTenant, tenant.ID, domain.AuditActionCreate, meta)
 	return tenant, nil
 }
 
-func (s *TenantService) MoveOut(ctx context.Context, orgID, id uuid.UUID) (*domain.Tenant, error) {
-	return s.repos.Tenants.MoveOut(ctx, orgID, id)
+func (s *TenantService) MoveOut(ctx context.Context, orgID, staffID, id uuid.UUID) (*domain.Tenant, error) {
+	tenant, err := s.repos.Tenants.MoveOut(ctx, orgID, id)
+	if err != nil {
+		return nil, err
+	}
+	_ = s.audit.Log(ctx, orgID, staffID, domain.AuditEntityTenant, tenant.ID, domain.AuditActionMoveOut, map[string]any{
+		"name":  tenant.Name,
+		"email": tenant.Email,
+	})
+	return tenant, nil
 }
 
 func normalizePhone(phone string) string {

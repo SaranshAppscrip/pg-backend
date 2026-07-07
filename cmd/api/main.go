@@ -47,6 +47,7 @@ func main() {
 	emailSender := notification.NewEmailSender(cfg.Email, cfg.App.Env, log)
 
 	authSvc := service.NewAuthService(repos, tokens, cfg.JWT, emailSender, cfg.Email)
+	auditSvc := service.NewAuditService(repos.Audit)
 	deps := router.Deps{
 		Config:   cfg,
 		Log:      log,
@@ -54,11 +55,12 @@ func main() {
 		Auth:     authSvc,
 		Settings: service.NewSettingsService(repos.Settings),
 		Rooms:    service.NewRoomService(repos),
-		Tenants:  service.NewTenantService(repos),
-		Payments: service.NewPaymentService(repos.Payments),
-		Expenses: service.NewExpenseService(repos.Expenses),
+		Tenants:  service.NewTenantService(repos, auditSvc),
+		Payments: service.NewPaymentService(repos.Payments, auditSvc),
+		Expenses: service.NewExpenseService(repos.Expenses, auditSvc),
 		Kitchen:  service.NewKitchenService(repos.Kitchen),
 		Staff:    service.NewStaffService(repos.Staff, authSvc),
+		Audit:    auditSvc,
 	}
 
 	engine := router.New(deps)

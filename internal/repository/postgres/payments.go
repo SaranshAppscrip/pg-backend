@@ -11,7 +11,9 @@ import (
 func (s *Store) ListPayments(ctx context.Context, orgID uuid.UUID) ([]domain.Payment, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, tenant_id, amount, date, for_month, mode, created_at
-		FROM payments WHERE organization_id = $1 ORDER BY date DESC, created_at DESC
+		FROM payments
+		WHERE organization_id = $1 AND deleted_at IS NULL
+		ORDER BY date DESC, created_at DESC
 	`, orgID)
 	if err != nil {
 		return nil, mapPgError(err, "")
@@ -37,21 +39,25 @@ func (s *Store) CreatePayment(ctx context.Context, orgID uuid.UUID, payment *dom
 	return mapPgError(err, "")
 }
 
-func (s *Store) DeletePayment(ctx context.Context, orgID, id uuid.UUID) error {
-	tag, err := s.pool.Exec(ctx, `DELETE FROM payments WHERE id = $1 AND organization_id = $2`, id, orgID)
+func (s *Store) SoftDeletePayment(ctx context.Context, orgID, id uuid.UUID) (*domain.Payment, error) {
+	var p domain.Payment
+	err := s.pool.QueryRow(ctx, `
+		UPDATE payments SET deleted_at = NOW()
+		WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL
+		RETURNING id, tenant_id, amount, date, for_month, mode, created_at
+	`, id, orgID).Scan(&p.ID, &p.TenantID, &p.Amount, &p.Date, &p.ForMonth, &p.Mode, &p.CreatedAt)
 	if err != nil {
-		return mapPgError(err, "")
+		return nil, mapPgError(err, "payment not found")
 	}
-	if tag.RowsAffected() == 0 {
-		return apperror.NotFound("payment not found")
-	}
-	return nil
+	return &p, nil
 }
 
 func (s *Store) ListPaymentsByTenant(ctx context.Context, orgID, tenantID uuid.UUID) ([]domain.Payment, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, tenant_id, amount, date, for_month, mode, created_at
-		FROM payments WHERE organization_id = $1 AND tenant_id = $2 ORDER BY date DESC
+		FROM payments
+		WHERE organization_id = $1 AND tenant_id = $2 AND deleted_at IS NULL
+		ORDER BY date DESC
 	`, orgID, tenantID)
 	if err != nil {
 		return nil, mapPgError(err, "")
