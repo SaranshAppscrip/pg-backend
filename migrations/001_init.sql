@@ -119,3 +119,14 @@ CREATE TABLE password_reset_tokens (
 CREATE INDEX password_reset_tokens_staff_id_idx ON password_reset_tokens (staff_id);
 CREATE INDEX password_reset_tokens_token_hash_idx ON password_reset_tokens (token_hash);
 
+CREATE TABLE tenant_password_reset_tokens (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id  UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at    TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX tenant_password_reset_tokens_tenant_id_idx ON tenant_password_reset_tokens (tenant_id);
+CREATE INDEX tenant_password_reset_tokens_token_hash_idx ON tenant_password_reset_tokens (token_hash);

@@ -13,6 +13,8 @@ import (
 type settingsRepo struct{ *Store }
 type staffRepo struct{ *Store }
 type passwordResetRepo struct{ *Store }
+type tenantPasswordResetRepo struct{ *Store }
+type refreshTokenRepo struct{ *Store }
 type roomRepo struct{ *Store }
 type tenantRepo struct{ *Store }
 type paymentRepo struct{ *Store }
@@ -25,8 +27,10 @@ func NewStoreBundle(pool *pgxpool.Pool) repository.Store {
 	return repository.Store{
 		Settings:      &settingsRepo{s},
 		Staff:         &staffRepo{s},
-		PasswordReset: &passwordResetRepo{s},
-		Rooms:         &roomRepo{s},
+		PasswordReset:       &passwordResetRepo{s},
+		TenantPasswordReset: &tenantPasswordResetRepo{s},
+		RefreshTokens:       &refreshTokenRepo{s},
+		Rooms:               &roomRepo{s},
 		Tenants:  &tenantRepo{s},
 		Payments: &paymentRepo{s},
 		Expenses: &expenseRepo{s},
@@ -52,6 +56,9 @@ func (r *staffRepo) GetByID(ctx context.Context, orgID, id uuid.UUID) (*domain.S
 func (r *staffRepo) GetByEmailAndOrg(ctx context.Context, orgID uuid.UUID, email string) (*domain.Staff, error) {
 	return r.GetStaffByEmailAndOrg(ctx, orgID, email)
 }
+func (r *staffRepo) ListByEmail(ctx context.Context, email string) ([]domain.Staff, error) {
+	return r.ListStaffByEmail(ctx, email)
+}
 func (r *staffRepo) List(ctx context.Context, orgID uuid.UUID) ([]domain.StaffProfile, error) {
 	return r.ListStaff(ctx, orgID)
 }
@@ -74,6 +81,34 @@ func (r *passwordResetRepo) GetValidByTokenHash(ctx context.Context, tokenHash s
 }
 func (r *passwordResetRepo) MarkUsed(ctx context.Context, tokenHash string) error {
 	return r.MarkPasswordResetTokenUsed(ctx, tokenHash)
+}
+
+// Tenant password reset
+func (r *tenantPasswordResetRepo) InvalidateUnusedForTenant(ctx context.Context, tenantID uuid.UUID) error {
+	return r.InvalidateUnusedTenantPasswordResetTokens(ctx, tenantID)
+}
+func (r *tenantPasswordResetRepo) Create(ctx context.Context, tenantID uuid.UUID, tokenHash string, expiresAt time.Time) error {
+	return r.CreateTenantPasswordResetToken(ctx, tenantID, tokenHash, expiresAt)
+}
+func (r *tenantPasswordResetRepo) GetValidByTokenHash(ctx context.Context, tokenHash string) (uuid.UUID, error) {
+	return r.GetValidTenantPasswordResetByTokenHash(ctx, tokenHash)
+}
+func (r *tenantPasswordResetRepo) MarkUsed(ctx context.Context, tokenHash string) error {
+	return r.MarkTenantPasswordResetTokenUsed(ctx, tokenHash)
+}
+
+// Refresh tokens
+func (r *refreshTokenRepo) Create(ctx context.Context, userType domain.TokenType, userID, orgID uuid.UUID, tokenHash string, expiresAt time.Time) error {
+	return r.CreateRefreshToken(ctx, userType, userID, orgID, tokenHash, expiresAt)
+}
+func (r *refreshTokenRepo) GetValidByTokenHash(ctx context.Context, tokenHash string) (*domain.RefreshToken, error) {
+	return r.GetValidRefreshTokenByHash(ctx, tokenHash)
+}
+func (r *refreshTokenRepo) Revoke(ctx context.Context, tokenHash string) error {
+	return r.RevokeRefreshToken(ctx, tokenHash)
+}
+func (r *refreshTokenRepo) RevokeAllForUser(ctx context.Context, userType domain.TokenType, userID uuid.UUID) error {
+	return r.RevokeAllRefreshTokensForUser(ctx, userType, userID)
 }
 
 // Rooms
@@ -109,6 +144,9 @@ func (r *tenantRepo) GetByID(ctx context.Context, orgID, id uuid.UUID) (*domain.
 func (r *tenantRepo) GetByEmailAndOrg(ctx context.Context, orgID uuid.UUID, email string) (*domain.Tenant, error) {
 	return r.GetTenantByEmailAndOrg(ctx, orgID, email)
 }
+func (r *tenantRepo) ListByEmail(ctx context.Context, email string) ([]domain.Tenant, error) {
+	return r.ListTenantsByEmail(ctx, email)
+}
 func (r *tenantRepo) GetByPhoneAndOrg(ctx context.Context, orgID uuid.UUID, phone string) (*domain.Tenant, error) {
 	return r.GetTenantByPhoneAndOrg(ctx, orgID, phone)
 }
@@ -123,6 +161,9 @@ func (r *tenantRepo) CountActiveInRoom(ctx context.Context, orgID, roomID uuid.U
 }
 func (r *tenantRepo) GetProfile(ctx context.Context, orgID, id uuid.UUID) (*domain.TenantProfile, error) {
 	return r.GetTenantProfile(ctx, orgID, id)
+}
+func (r *tenantRepo) UpdatePassword(ctx context.Context, tenantID uuid.UUID, passwordHash string) error {
+	return r.UpdateTenantPassword(ctx, tenantID, passwordHash)
 }
 
 // Payments

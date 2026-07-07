@@ -17,6 +17,7 @@ type StaffRepository interface {
 	Create(ctx context.Context, staff *domain.Staff) error
 	GetByID(ctx context.Context, orgID, id uuid.UUID) (*domain.Staff, error)
 	GetByEmailAndOrg(ctx context.Context, orgID uuid.UUID, email string) (*domain.Staff, error)
+	ListByEmail(ctx context.Context, email string) ([]domain.Staff, error)
 	List(ctx context.Context, orgID uuid.UUID) ([]domain.StaffProfile, error)
 	Delete(ctx context.Context, orgID, id uuid.UUID) error
 	UpdatePassword(ctx context.Context, staffID uuid.UUID, passwordHash string) error
@@ -43,11 +44,27 @@ type TenantRepository interface {
 	Create(ctx context.Context, tenant *domain.Tenant) error
 	GetByID(ctx context.Context, orgID, id uuid.UUID) (*domain.Tenant, error)
 	GetByEmailAndOrg(ctx context.Context, orgID uuid.UUID, email string) (*domain.Tenant, error)
+	ListByEmail(ctx context.Context, email string) ([]domain.Tenant, error)
 	GetByPhoneAndOrg(ctx context.Context, orgID uuid.UUID, phone string) (*domain.Tenant, error)
 	GetByNameAndOrg(ctx context.Context, orgID uuid.UUID, name string) (*domain.Tenant, error)
 	MoveOut(ctx context.Context, orgID, id uuid.UUID) (*domain.Tenant, error)
 	CountActiveInRoom(ctx context.Context, orgID, roomID uuid.UUID) (int, error)
 	GetProfile(ctx context.Context, orgID, id uuid.UUID) (*domain.TenantProfile, error)
+	UpdatePassword(ctx context.Context, tenantID uuid.UUID, passwordHash string) error
+}
+
+type TenantPasswordResetRepository interface {
+	InvalidateUnusedForTenant(ctx context.Context, tenantID uuid.UUID) error
+	Create(ctx context.Context, tenantID uuid.UUID, tokenHash string, expiresAt time.Time) error
+	GetValidByTokenHash(ctx context.Context, tokenHash string) (tenantID uuid.UUID, err error)
+	MarkUsed(ctx context.Context, tokenHash string) error
+}
+
+type RefreshTokenRepository interface {
+	Create(ctx context.Context, userType domain.TokenType, userID, orgID uuid.UUID, tokenHash string, expiresAt time.Time) error
+	GetValidByTokenHash(ctx context.Context, tokenHash string) (*domain.RefreshToken, error)
+	Revoke(ctx context.Context, tokenHash string) error
+	RevokeAllForUser(ctx context.Context, userType domain.TokenType, userID uuid.UUID) error
 }
 
 type PaymentRepository interface {
@@ -77,8 +94,10 @@ type KitchenRepository interface {
 type Store struct {
 	Settings      SettingsRepository
 	Staff         StaffRepository
-	PasswordReset PasswordResetRepository
-	Rooms         RoomRepository
+	PasswordReset       PasswordResetRepository
+	TenantPasswordReset TenantPasswordResetRepository
+	RefreshTokens       RefreshTokenRepository
+	Rooms               RoomRepository
 	Tenants  TenantRepository
 	Payments PaymentRepository
 	Expenses ExpenseRepository

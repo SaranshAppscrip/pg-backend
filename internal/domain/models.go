@@ -171,12 +171,25 @@ type AuthClaims struct {
 	IsOwner        bool      `json:"is_owner,omitempty"`
 }
 
+type RefreshToken struct {
+	ID             uuid.UUID `json:"id"`
+	UserType       TokenType `json:"user_type"`
+	UserID         uuid.UUID `json:"user_id"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+}
+
+type TokenPair struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	Token        string `json:"token"` // alias for access_token (backward compat)
+}
+
 type AuthResponse struct {
-	Token string        `json:"token"`
-	User  *StaffProfile `json:"user,omitempty"`
+	TokenPair
+	User *StaffProfile `json:"user,omitempty"`
 }
 
 type TenantAuthResponse struct {
-	Token string         `json:"token"`
-	User  *TenantProfile `json:"user,omitempty"`
+	TokenPair
+	User *TenantProfile `json:"user,omitempty"`
 }

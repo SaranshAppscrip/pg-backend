@@ -23,8 +23,9 @@ type StaffInviteParams struct {
 }
 
 type PasswordResetParams struct {
-	To       string
-	ResetURL string
+	To        string
+	ResetURL  string
+	ForTenant bool
 }
 
 type EmailSender interface {
@@ -51,39 +52,16 @@ func NewEmailSender(cfg config.EmailConfig, appEnv string, log *slog.Logger) Ema
 func (s *resendSender) SendStaffInvite(ctx context.Context, p StaffInviteParams) error {
 	loginURL := strings.TrimRight(s.cfg.FrontendURL, "/") + "/login"
 	subject := fmt.Sprintf("You're invited to %s on Nivas", p.OrganizationName)
-	body := fmt.Sprintf(`Hello,
-
-You have been invited to join %s on Nivas.
-
-Sign in at: %s
-
-Organization ID: %s
-Email: %s
-Temporary password: %s
-
-After signing in, use "Forgot password" on the login page to set your own password.
-
-— Nivas
-`, p.OrganizationName, loginURL, p.OrganizationID, p.Email, p.TempPassword)
-
-	return s.send(ctx, p.To, subject, body)
+	text := staffInviteText(p, loginURL)
+	htmlBody := staffInviteHTML(p, loginURL)
+	return s.send(ctx, p.To, subject, text, htmlBody)
 }
 
 func (s *resendSender) SendPasswordReset(ctx context.Context, p PasswordResetParams) error {
 	subject := "Reset your Nivas password"
-	body := fmt.Sprintf(`Hello,
-
-We received a request to reset your Nivas staff password.
-
-Reset your password here (link expires in 1 hour):
-%s
-
-If you did not request this, you can ignore this email.
-
-— Nivas
-`, p.ResetURL)
-
-	return s.send(ctx, p.To, subject, body)
+	text := passwordResetText(p)
+	htmlBody := passwordResetHTML(p)
+	return s.send(ctx, p.To, subject, text, htmlBody)
 }
 
 type resendPayload struct {
@@ -91,6 +69,7 @@ type resendPayload struct {
 	To      []string `json:"to"`
 	Subject string   `json:"subject"`
 	Text    string   `json:"text"`
+	HTML    string   `json:"html"`
 }
 
 type resendErrorBody struct {
@@ -109,7 +88,6 @@ func ResendErrorMessage(err error) string {
 		return ""
 	}
 	jsonPart := msg[idx+len(prefix):]
-	// strip leading " 403: "
 	if colon := strings.Index(jsonPart, ":"); colon >= 0 {
 		jsonPart = strings.TrimSpace(jsonPart[colon+1:])
 	}
@@ -120,13 +98,13 @@ func ResendErrorMessage(err error) string {
 	return ""
 }
 
-func (s *resendSender) send(ctx context.Context, to, subject, text string) error {
+func (s *resendSender) send(ctx context.Context, to, subject, text, htmlBody string) error {
 	if s.cfg.ResendAPIKey == "" {
 		if s.appEnv == "development" {
 			s.log.Info("email (dev mode, not sent)",
 				"to", to,
 				"subject", subject,
-				"body", text,
+				"text", text,
 			)
 			return nil
 		}
@@ -140,7 +118,7 @@ func (s *resendSender) send(ctx context.Context, to, subject, text string) error
 			"redirected_to", s.cfg.DevRedirectTo,
 		)
 		actualTo = s.cfg.DevRedirectTo
-		text = fmt.Sprintf("[Dev redirect — intended recipient: %s]\n\n%s", to, text)
+		text, htmlBody = wrapDevRedirect(to, text, htmlBody)
 		subject = "[Dev] " + subject
 	}
 
@@ -149,6 +127,7 @@ func (s *resendSender) send(ctx context.Context, to, subject, text string) error
 		To:      []string{actualTo},
 		Subject: subject,
 		Text:    text,
+		HTML:    htmlBody,
 	})
 	if err != nil {
 		return err

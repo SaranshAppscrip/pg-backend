@@ -220,3 +220,8 @@ func GetUserType(c *gin.Context) domain.TokenType {
 	}
 	return claims.Type
 }
+
+func IsStaffOwner(c *gin.Context) bool {
+	claims := GetClaims(c)
+	return claims != nil && claims.IsOwner
+}

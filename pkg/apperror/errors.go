@@ -22,6 +22,7 @@ const (
 	CodeDuplicateName       Code = "DUPLICATE_NAME"
 	CodeDuplicateRoomNumber Code = "DUPLICATE_ROOM_NUMBER"
 	CodeRoomAtCapacity      Code = "ROOM_AT_CAPACITY"
+	CodeMultipleOrganizations Code = "MULTIPLE_ORGANIZATIONS"
 )
 
 // AppError is the application's typed error with HTTP mapping.
@@ -125,6 +126,13 @@ func DuplicateRoomNumber() *AppError {
 func RoomAtCapacity() *AppError {
 	return New(CodeRoomAtCapacity, "Room is at capacity", http.StatusConflict).
 		WithDetails([]map[string]string{{"field": "room_id", "issue": "at capacity"}})
+}
+
+func MultipleOrganizations(orgs []map[string]string) *AppError {
+	return New(CodeMultipleOrganizations,
+		"This email is registered with multiple organizations. Select one to continue.",
+		http.StatusConflict,
+	).WithDetails(orgs)
 }
 
 // IsNotFound reports whether err is a NOT_FOUND application error.

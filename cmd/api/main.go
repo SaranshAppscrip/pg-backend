@@ -46,7 +46,7 @@ func main() {
 	tokens := auth.NewTokenService(cfg.JWT)
 	emailSender := notification.NewEmailSender(cfg.Email, cfg.App.Env, log)
 
-	authSvc := service.NewAuthService(repos, tokens, emailSender, cfg.Email)
+	authSvc := service.NewAuthService(repos, tokens, cfg.JWT, emailSender, cfg.Email)
 	deps := router.Deps{
 		Config:   cfg,
 		Log:      log,

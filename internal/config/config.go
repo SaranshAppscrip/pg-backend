@@ -39,9 +39,10 @@ type DatabaseConfig struct {
 }
 
 type JWTConfig struct {
-	Secret          string
-	StaffTTL        time.Duration
-	TenantTTL       time.Duration
+	Secret            string
+	AccessTokenTTL    time.Duration
+	StaffRefreshTTL   time.Duration
+	TenantRefreshTTL  time.Duration
 }
 
 type CORSConfig struct {
@@ -77,11 +78,22 @@ func Load() (*Config, error) {
 			MinConns:        int32(getEnvInt("DB_MIN_CONNS", 5)),
 			MaxConnLifetime: getEnvDuration("DB_MAX_CONN_LIFETIME", time.Hour),
 		},
-		JWT: JWTConfig{
-			Secret:    getEnv("JWT_SECRET", "change-me-in-production"),
-			StaffTTL:  getEnvDuration("JWT_STAFF_TTL", 7*24*time.Hour),
-			TenantTTL: getEnvDuration("JWT_TENANT_TTL", 30*24*time.Hour),
-		},
+		JWT: func() JWTConfig {
+			staffRefresh := getEnvDuration("JWT_STAFF_REFRESH_TTL", 7*24*time.Hour)
+			if os.Getenv("JWT_STAFF_REFRESH_TTL") == "" {
+				staffRefresh = getEnvDuration("JWT_STAFF_TTL", 7*24*time.Hour)
+			}
+			tenantRefresh := getEnvDuration("JWT_TENANT_REFRESH_TTL", 30*24*time.Hour)
+			if os.Getenv("JWT_TENANT_REFRESH_TTL") == "" {
+				tenantRefresh = getEnvDuration("JWT_TENANT_TTL", 30*24*time.Hour)
+			}
+			return JWTConfig{
+				Secret:           getEnv("JWT_SECRET", "change-me-in-production"),
+				AccessTokenTTL:   getEnvDuration("JWT_ACCESS_TTL", 15*time.Minute),
+				StaffRefreshTTL:  staffRefresh,
+				TenantRefreshTTL: tenantRefresh,
+			}
+		}(),
 		CORS: CORSConfig{
 			AllowedOrigins: getEnvSlice("CORS_ALLOWED_ORIGINS", []string{"http://localhost:5173"}),
 		},

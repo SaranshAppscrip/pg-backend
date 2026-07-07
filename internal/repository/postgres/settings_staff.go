@@ -65,6 +65,27 @@ func (s *Store) GetStaffByEmailAndOrg(ctx context.Context, orgID uuid.UUID, emai
 	return &staff, nil
 }
 
+func (s *Store) ListStaffByEmail(ctx context.Context, email string) ([]domain.Staff, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, organization_id, email, password_hash, full_name, is_owner, created_at
+		FROM staff WHERE lower(trim(email)) = lower(trim($1))
+	`, email)
+	if err != nil {
+		return nil, mapPgError(err, "")
+	}
+	defer rows.Close()
+
+	var list []domain.Staff
+	for rows.Next() {
+		var staff domain.Staff
+		if err := rows.Scan(&staff.ID, &staff.OrganizationID, &staff.Email, &staff.PasswordHash, &staff.FullName, &staff.IsOwner, &staff.CreatedAt); err != nil {
+			return nil, apperror.Internal("scan staff", err)
+		}
+		list = append(list, staff)
+	}
+	return list, rows.Err()
+}
+
 func (s *Store) ListStaff(ctx context.Context, orgID uuid.UUID) ([]domain.StaffProfile, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, organization_id, email, full_name, is_owner, created_at

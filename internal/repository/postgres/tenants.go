@@ -61,6 +61,27 @@ func (s *Store) GetTenantByEmailAndOrg(ctx context.Context, orgID uuid.UUID, ema
 	return &t, nil
 }
 
+func (s *Store) ListTenantsByEmail(ctx context.Context, email string) ([]domain.Tenant, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, organization_id, name, email, password_hash, phone, room_id, monthly_fee, join_date, active, created_at
+		FROM tenants WHERE lower(trim(email)) = lower(trim($1))
+	`, email)
+	if err != nil {
+		return nil, mapPgError(err, "")
+	}
+	defer rows.Close()
+
+	var list []domain.Tenant
+	for rows.Next() {
+		var t domain.Tenant
+		if err := rows.Scan(&t.ID, &t.OrganizationID, &t.Name, &t.Email, &t.PasswordHash, &t.Phone, &t.RoomID, &t.MonthlyFee, &t.JoinDate, &t.Active, &t.CreatedAt); err != nil {
+			return nil, apperror.Internal("scan tenant", err)
+		}
+		list = append(list, t)
+	}
+	return list, rows.Err()
+}
+
 func (s *Store) GetTenantByPhoneAndOrg(ctx context.Context, orgID uuid.UUID, phone string) (*domain.Tenant, error) {
 	var t domain.Tenant
 	err := s.pool.QueryRow(ctx, `

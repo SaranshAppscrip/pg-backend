@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -22,9 +23,24 @@ func NewAuthHandler(auth *service.AuthService) *AuthHandler {
 }
 
 type loginRequest struct {
-	OrganizationID string `json:"organization_id"`
-	Email          string `json:"email"`
-	Password       string `json:"password"`
+	OrganizationID *string `json:"organization_id"`
+	Email          string  `json:"email"`
+	Password       string  `json:"password"`
+}
+
+func parseOptionalOrgID(raw *string) (*uuid.UUID, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	s := strings.TrimSpace(*raw)
+	if s == "" {
+		return nil, nil
+	}
+	id, err := uuid.Parse(s)
+	if err != nil {
+		return nil, apperror.BadRequest("invalid organization_id")
+	}
+	return &id, nil
 }
 
 func (h *AuthHandler) StaffLogin(c *gin.Context) {
@@ -33,12 +49,12 @@ func (h *AuthHandler) StaffLogin(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	orgID, err := uuid.Parse(req.OrganizationID)
+	orgID, err := parseOptionalOrgID(req.OrganizationID)
 	if err != nil {
-		response.Error(c, apperror.BadRequest("invalid organization_id"))
+		response.Error(c, err)
 		return
 	}
-	res, err := h.auth.StaffLogin(c.Request.Context(), orgID, req.Email, req.Password)
+	res, err := h.auth.StaffLogin(c.Request.Context(), req.Email, req.Password, orgID)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -57,12 +73,39 @@ func (h *AuthHandler) StaffMe(c *gin.Context) {
 }
 
 func (h *AuthHandler) StaffLogout(c *gin.Context) {
+	var req refreshTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	if err := h.auth.StaffLogout(c.Request.Context(), req.RefreshToken); err != nil {
+		response.Error(c, err)
+		return
+	}
 	response.NoContent(c)
 }
 
+type refreshTokenRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+func (h *AuthHandler) StaffRefresh(c *gin.Context) {
+	var req refreshTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	res, err := h.auth.StaffRefresh(c.Request.Context(), req.RefreshToken)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, res)
+}
+
 type forgotPasswordRequest struct {
-	OrganizationID string `json:"organization_id"`
-	Email          string `json:"email"`
+	OrganizationID *string `json:"organization_id"`
+	Email          string  `json:"email"`
 }
 
 func (h *AuthHandler) StaffForgotPassword(c *gin.Context) {
@@ -71,12 +114,12 @@ func (h *AuthHandler) StaffForgotPassword(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	orgID, err := uuid.Parse(req.OrganizationID)
+	orgID, err := parseOptionalOrgID(req.OrganizationID)
 	if err != nil {
-		response.Error(c, apperror.BadRequest("invalid organization_id"))
+		response.Error(c, err)
 		return
 	}
-	if err := h.auth.StaffForgotPassword(c.Request.Context(), orgID, req.Email); err != nil {
+	if err := h.auth.StaffForgotPassword(c.Request.Context(), req.Email, orgID); err != nil {
 		response.Error(c, err)
 		return
 	}
@@ -107,17 +150,48 @@ func (h *AuthHandler) TenantLogin(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	orgID, err := uuid.Parse(req.OrganizationID)
+	orgID, err := parseOptionalOrgID(req.OrganizationID)
 	if err != nil {
-		response.Error(c, apperror.BadRequest("invalid organization_id"))
+		response.Error(c, err)
 		return
 	}
-	res, err := h.auth.TenantLogin(c.Request.Context(), orgID, req.Email, req.Password)
+	res, err := h.auth.TenantLogin(c.Request.Context(), req.Email, req.Password, orgID)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
 	response.OK(c, res)
+}
+
+func (h *AuthHandler) TenantForgotPassword(c *gin.Context) {
+	var req forgotPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	orgID, err := parseOptionalOrgID(req.OrganizationID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if err := h.auth.TenantForgotPassword(c.Request.Context(), req.Email, orgID); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, gin.H{"message": "If an account exists, a reset email was sent"})
+}
+
+func (h *AuthHandler) TenantResetPassword(c *gin.Context) {
+	var req resetPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	if err := h.auth.TenantResetPassword(c.Request.Context(), req.Token, req.Password); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, gin.H{"message": "Password updated successfully"})
 }
 
 func (h *AuthHandler) TenantMe(c *gin.Context) {
@@ -128,6 +202,33 @@ func (h *AuthHandler) TenantMe(c *gin.Context) {
 		return
 	}
 	response.OK(c, profile)
+}
+
+func (h *AuthHandler) TenantLogout(c *gin.Context) {
+	var req refreshTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	if err := h.auth.TenantLogout(c.Request.Context(), req.RefreshToken); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.NoContent(c)
+}
+
+func (h *AuthHandler) TenantRefresh(c *gin.Context) {
+	var req refreshTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	res, err := h.auth.TenantRefresh(c.Request.Context(), req.RefreshToken)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, res)
 }
 
 type SettingsHandler struct {
@@ -563,6 +664,10 @@ type inviteStaffRequest struct {
 }
 
 func (h *StaffHandler) Invite(c *gin.Context) {
+	if !middleware.IsStaffOwner(c) {
+		response.Error(c, apperror.Forbidden("only the organization owner can invite staff"))
+		return
+	}
 	var req inviteStaffRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, err)
@@ -577,6 +682,10 @@ func (h *StaffHandler) Invite(c *gin.Context) {
 }
 
 func (h *StaffHandler) Remove(c *gin.Context) {
+	if !middleware.IsStaffOwner(c) {
+		response.Error(c, apperror.Forbidden("only the organization owner can remove staff"))
+		return
+	}
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		response.Error(c, err)

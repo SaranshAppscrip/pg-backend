@@ -11,16 +11,14 @@ import (
 )
 
 type TokenService struct {
-	secret    []byte
-	staffTTL  time.Duration
-	tenantTTL time.Duration
+	secret         []byte
+	accessTokenTTL time.Duration
 }
 
 func NewTokenService(cfg config.JWTConfig) *TokenService {
 	return &TokenService{
-		secret:    []byte(cfg.Secret),
-		staffTTL:  cfg.StaffTTL,
-		tenantTTL: cfg.TenantTTL,
+		secret:         []byte(cfg.Secret),
+		accessTokenTTL: cfg.AccessTokenTTL,
 	}
 }
 
@@ -36,7 +34,7 @@ func (s *TokenService) GenerateStaffToken(staff *domain.Staff) (string, error) {
 		UserID:         staff.ID,
 		Email:          staff.Email,
 		IsOwner:        staff.IsOwner,
-	}, s.staffTTL)
+	})
 }
 
 func (s *TokenService) GenerateTenantToken(tenant *domain.Tenant) (string, error) {
@@ -45,7 +43,11 @@ func (s *TokenService) GenerateTenantToken(tenant *domain.Tenant) (string, error
 		OrganizationID: tenant.OrganizationID,
 		UserID:         tenant.ID,
 		Email:          tenant.Email,
-	}, s.tenantTTL)
+	})
+}
+
+func (s *TokenService) GenerateAccessToken(claims domain.AuthClaims) (string, error) {
+	return s.sign(claims)
 }
 
 func (s *TokenService) Parse(tokenStr string) (*domain.AuthClaims, error) {
@@ -67,12 +69,12 @@ func (s *TokenService) Parse(tokenStr string) (*domain.AuthClaims, error) {
 	return &c.AuthClaims, nil
 }
 
-func (s *TokenService) sign(authClaims domain.AuthClaims, ttl time.Duration) (string, error) {
+func (s *TokenService) sign(authClaims domain.AuthClaims) (string, error) {
 	now := time.Now()
 	c := claims{
 		AuthClaims: authClaims,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(s.accessTokenTTL)),
 			IssuedAt:  jwt.NewNumericDate(now),
 			Issuer:    "nivas",
 		},

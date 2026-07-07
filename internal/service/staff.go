@@ -26,5 +26,8 @@ func (s *StaffService) Invite(ctx context.Context, orgID uuid.UUID, email, passw
 }
 
 func (s *StaffService) Remove(ctx context.Context, orgID, id uuid.UUID) error {
-	return s.repos.Delete(ctx, orgID, id)
+	if err := s.repos.Delete(ctx, orgID, id); err != nil {
+		return err
+	}
+	return s.auth.RevokeAllStaffSessions(ctx, id)
 }

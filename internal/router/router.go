@@ -51,14 +51,17 @@ func New(deps Deps) *gin.Engine {
 	{
 		// Public auth
 		v1.POST("/auth/staff/login", h.StaffLogin)
+		v1.POST("/auth/staff/refresh", h.StaffRefresh)
+		v1.POST("/auth/staff/logout", h.StaffLogout)
 		v1.POST("/auth/staff/forgot-password", h.StaffForgotPassword)
 		v1.POST("/auth/staff/reset-password", h.StaffResetPassword)
 		v1.POST("/auth/tenant/login", h.TenantLogin)
+		v1.POST("/auth/tenant/refresh", h.TenantRefresh)
+		v1.POST("/auth/tenant/logout", h.TenantLogout)
 
 		// Staff routes
 		staff := v1.Group("", middleware.StaffAuth(deps.Tokens))
 		{
-			staff.POST("/auth/staff/logout", h.StaffLogout)
 			staff.GET("/auth/staff/me", h.StaffMe)
 
 			staff.GET("/settings", settingsH.Get)
