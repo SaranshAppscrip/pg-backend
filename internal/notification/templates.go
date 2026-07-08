@@ -158,3 +158,85 @@ func wrapDevRedirect(recipient, text, htmlBody string) (string, string) {
 	htmlBody = strings.Replace(htmlBody, `<td style="padding:32px;">`, `<td style="padding:32px;">`+htmlPrefix, 1)
 	return text, htmlBody
 }
+
+func rentReminderSubject(p RentReminderParams) string {
+	if p.ReminderType == "overdue" {
+		return fmt.Sprintf("Overdue rent reminder — %s", p.ForMonth)
+	}
+	return fmt.Sprintf("Rent due reminder — %s", p.ForMonth)
+}
+
+func rentReminderText(p RentReminderParams) string {
+	return fmt.Sprintf(`Hello %s,
+
+This is a friendly reminder about your rent for %s at %s.
+
+Monthly rent: Rs. %.0f
+Paid so far: Rs. %.0f
+Balance due: Rs. %.0f
+
+Please contact the property office if you have already paid.
+
+— Nivas
+`, p.TenantName, p.ForMonth, p.PropertyName, p.MonthlyFee, p.Paid, p.Due)
+}
+
+func rentReminderHTML(p RentReminderParams) string {
+	intro := "Your rent for this month is due soon."
+	if p.ReminderType == "overdue" {
+		intro = "Your rent payment is overdue."
+	}
+	content := fmt.Sprintf(`
+<p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#3d3d3d;">Hello %s,</p>
+<p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#3d3d3d;">%s</p>
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%%" style="margin:0 0 24px;background:#faf7f2;border:1px solid #e8e0d4;border-radius:8px;">
+  <tr><td style="padding:20px;">
+    <p style="margin:0 0 8px;font-size:15px;color:#3d3d3d;"><strong>Property:</strong> %s</p>
+    <p style="margin:0 0 8px;font-size:15px;color:#3d3d3d;"><strong>Month:</strong> %s</p>
+    <p style="margin:0 0 8px;font-size:15px;color:#3d3d3d;"><strong>Monthly rent:</strong> Rs. %.0f</p>
+    <p style="margin:0 0 8px;font-size:15px;color:#3d3d3d;"><strong>Paid:</strong> Rs. %.0f</p>
+    <p style="margin:0;font-size:15px;color:#c45c6a;"><strong>Balance due:</strong> Rs. %.0f</p>
+  </td></tr>
+</table>`,
+		html.EscapeString(p.TenantName), intro,
+		html.EscapeString(p.PropertyName), html.EscapeString(p.ForMonth),
+		p.MonthlyFee, p.Paid, p.Due,
+	)
+	return emailLayout(rentReminderSubject(p), content, "")
+}
+
+func PaymentReceiptHTML(d struct {
+	TenantName, PropertyName, OrganizationName, Date, ForMonth, Mode string
+	Amount float64
+	PaymentID string
+}) (string, string) {
+	subject := fmt.Sprintf("Payment receipt — %s", d.ForMonth)
+	text := fmt.Sprintf(`Hello %s,
+
+We received your payment of Rs. %.0f for %s (%s).
+
+Property: %s
+Date: %s
+Mode: %s
+Receipt ID: %s
+
+— %s
+`, d.TenantName, d.Amount, d.ForMonth, d.PropertyName, d.PropertyName, d.Date, d.Mode, d.PaymentID, d.OrganizationName)
+
+	content := fmt.Sprintf(`
+<p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#3d3d3d;">Hello %s,</p>
+<p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#3d3d3d;">Thank you — we received your payment of <strong>Rs. %.0f</strong> for <strong>%s</strong>.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%%" style="background:#faf7f2;border:1px solid #e8e0d4;border-radius:8px;">
+  <tr><td style="padding:20px;">
+    <p style="margin:0 0 8px;font-size:15px;color:#3d3d3d;"><strong>Property:</strong> %s</p>
+    <p style="margin:0 0 8px;font-size:15px;color:#3d3d3d;"><strong>Date:</strong> %s</p>
+    <p style="margin:0 0 8px;font-size:15px;color:#3d3d3d;"><strong>Mode:</strong> %s</p>
+    <p style="margin:0;font-size:13px;color:#6b6b6b;">Receipt ID: %s</p>
+  </td></tr>
+</table>
+<p style="margin:16px 0 0;font-size:14px;color:#6b6b6b;">A PDF copy is attached for your records.</p>`,
+		html.EscapeString(d.TenantName), d.Amount, html.EscapeString(d.ForMonth),
+		html.EscapeString(d.PropertyName), html.EscapeString(d.Date), html.EscapeString(d.Mode), html.EscapeString(d.PaymentID),
+	)
+	return subject, emailLayout(subject, content, text)
+}

@@ -278,13 +278,19 @@ func NewRoomHandler(svc *service.RoomService) *RoomHandler {
 }
 
 type createRoomRequest struct {
+	PropertyID string `json:"property_id"`
 	RoomNumber string `json:"room_number"`
 	Capacity   int    `json:"capacity"`
 }
 
 func (h *RoomHandler) List(c *gin.Context) {
 	orgID := middleware.GetOrganizationID(c)
-	rooms, err := h.svc.List(c.Request.Context(), orgID)
+	propertyID, err := middleware.OptionalPropertyID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	rooms, err := h.svc.List(c.Request.Context(), orgID, propertyID)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -301,7 +307,12 @@ func (h *RoomHandler) Create(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	room, err := h.svc.Create(c.Request.Context(), middleware.GetOrganizationID(c), req.RoomNumber, req.Capacity)
+	propertyID, err := uuid.Parse(req.PropertyID)
+	if err != nil {
+		response.Error(c, apperror.BadRequest("invalid property_id"))
+		return
+	}
+	room, err := h.svc.Create(c.Request.Context(), middleware.GetOrganizationID(c), propertyID, req.RoomNumber, req.Capacity)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -341,7 +352,12 @@ type createTenantRequest struct {
 }
 
 func (h *TenantHandler) List(c *gin.Context) {
-	tenants, err := h.svc.List(c.Request.Context(), middleware.GetOrganizationID(c))
+	propertyID, err := middleware.OptionalPropertyID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	tenants, err := h.svc.List(c.Request.Context(), middleware.GetOrganizationID(c), propertyID)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -411,7 +427,12 @@ type createPaymentRequest struct {
 }
 
 func (h *PaymentHandler) List(c *gin.Context) {
-	payments, err := h.svc.List(c.Request.Context(), middleware.GetOrganizationID(c))
+	propertyID, err := middleware.OptionalPropertyID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	payments, err := h.svc.List(c.Request.Context(), middleware.GetOrganizationID(c), propertyID)
 	if err != nil {
 		response.Error(c, err)
 		return

@@ -171,3 +171,155 @@ CREATE TABLE staff_audit_log (
 
 CREATE INDEX idx_staff_audit_log_org ON staff_audit_log (organization_id, created_at DESC);
 CREATE INDEX idx_staff_audit_log_entity ON staff_audit_log (entity_type, entity_id);
+
+-- Multi-property support
+CREATE TABLE properties (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name            TEXT NOT NULL,
+  address         TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT properties_org_name_unique UNIQUE (organization_id, name)
+);
+
+-- Default property per org for existing data
+INSERT INTO properties (id, organization_id, name)
+SELECT gen_random_uuid(), o.id, o.name
+FROM organizations o
+WHERE NOT EXISTS (SELECT 1 FROM properties p WHERE p.organization_id = o.id);
+
+ALTER TABLE rooms ADD COLUMN IF NOT EXISTS property_id UUID REFERENCES properties(id);
+
+UPDATE rooms r
+SET property_id = p.id
+FROM properties p
+WHERE r.property_id IS NULL AND p.organization_id = r.organization_id;
+
+ALTER TABLE rooms ALTER COLUMN property_id SET NOT NULL;
+
+ALTER TABLE rooms DROP CONSTRAINT IF EXISTS rooms_org_room_number_unique;
+ALTER TABLE rooms ADD CONSTRAINT rooms_property_room_number_unique UNIQUE (property_id, room_number);
+CREATE INDEX IF NOT EXISTS idx_rooms_property ON rooms(property_id);
+
+-- Rent reminder deduplication
+CREATE TABLE rent_reminder_log (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id     UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  for_month     TEXT NOT NULL,
+  reminder_type TEXT NOT NULL CHECK (reminder_type IN ('due', 'overdue')),
+  sent_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT rent_reminder_unique UNIQUE (tenant_id, for_month, reminder_type)
+);
+
+CREATE INDEX idx_rent_reminder_tenant ON rent_reminder_log(tenant_id);
+
+-- Document storage (tenant ID proof, lease; owner PG registration / permissions)
+CREATE TYPE tenant_document_type AS ENUM (
+  'id_proof', 'lease_agreement', 'police_verification', 'photo', 'other'
+);
+
+CREATE TYPE organization_document_type AS ENUM (
+  'pg_registration', 'fire_safety_noc', 'police_permission',
+  'trade_license', 'property_tax', 'other'
+);
+
+CREATE TABLE tenant_documents (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  tenant_id         UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  document_type     tenant_document_type NOT NULL,
+  title             TEXT,
+  storage_key       TEXT NOT NULL,
+  original_filename TEXT NOT NULL,
+  content_type      TEXT NOT NULL,
+  size_bytes        BIGINT NOT NULL CHECK (size_bytes > 0),
+  uploaded_by       UUID REFERENCES staff(id) ON DELETE SET NULL,
+  expires_at        DATE,
+  deleted_at        TIMESTAMPTZ,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE organization_documents (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  property_id       UUID REFERENCES properties(id) ON DELETE SET NULL,
+  document_type     organization_document_type NOT NULL,
+  title             TEXT,
+  storage_key       TEXT NOT NULL,
+  original_filename TEXT NOT NULL,
+  content_type      TEXT NOT NULL,
+  size_bytes        BIGINT NOT NULL CHECK (size_bytes > 0),
+  uploaded_by       UUID REFERENCES staff(id) ON DELETE SET NULL,
+  expires_at        DATE,
+  deleted_at        TIMESTAMPTZ,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_tenant_documents_tenant ON tenant_documents(tenant_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_tenant_documents_org ON tenant_documents(organization_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_organization_documents_org ON organization_documents(organization_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_organization_documents_property ON organization_documents(property_id) WHERE deleted_at IS NULL;
+
+-- Announcements / notice board
+CREATE TYPE announcement_category AS ENUM ('maintenance', 'holiday', 'rules', 'general');
+
+CREATE TABLE announcements (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  property_id     UUID REFERENCES properties(id) ON DELETE SET NULL,
+  title           TEXT NOT NULL,
+  body            TEXT NOT NULL,
+  category        announcement_category NOT NULL DEFAULT 'general',
+  pinned          BOOLEAN NOT NULL DEFAULT false,
+  published       BOOLEAN NOT NULL DEFAULT true,
+  expires_at      TIMESTAMPTZ,
+  created_by      UUID REFERENCES staff(id) ON DELETE SET NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_announcements_org ON announcements(organization_id, published, created_at DESC);
+
+-- Maintenance / complaint requests
+CREATE TYPE maintenance_category AS ENUM ('electrical', 'plumbing', 'wifi', 'cleaning', 'other');
+CREATE TYPE maintenance_status AS ENUM ('open', 'in_progress', 'resolved', 'closed');
+
+CREATE TABLE maintenance_requests (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  tenant_id       UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  category        maintenance_category NOT NULL,
+  title           TEXT NOT NULL,
+  description     TEXT NOT NULL,
+  status          maintenance_status NOT NULL DEFAULT 'open',
+  staff_note      TEXT,
+  resolved_at     TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_maintenance_org_status ON maintenance_requests(organization_id, status, created_at DESC);
+CREATE INDEX idx_maintenance_tenant ON maintenance_requests(tenant_id);
+
+-- Visitor log
+CREATE TABLE visitor_log (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  property_id     UUID NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+  tenant_id       UUID REFERENCES tenants(id) ON DELETE SET NULL,
+  visitor_name    TEXT NOT NULL,
+  visitor_phone   TEXT,
+  purpose         TEXT,
+  id_type         TEXT,
+  id_number       TEXT,
+  entry_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  exit_at         TIMESTAMPTZ,
+  logged_by       UUID REFERENCES staff(id) ON DELETE SET NULL,
+  notes           TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_visitor_log_org ON visitor_log(organization_id, entry_at DESC);
+CREATE INDEX idx_visitor_log_property ON visitor_log(property_id, entry_at DESC);
+

@@ -5,14 +5,24 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nivas/server/internal/domain"
+	"github.com/nivas/server/internal/repository"
 	"github.com/nivas/server/pkg/apperror"
 )
 
-func (s *Store) ListTenants(ctx context.Context, orgID uuid.UUID) ([]domain.Tenant, error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT id, organization_id, name, email, phone, room_id, monthly_fee, join_date, active, created_at
-		FROM tenants WHERE organization_id = $1 ORDER BY created_at
-	`, orgID)
+func (s *Store) ListTenants(ctx context.Context, orgID uuid.UUID, propertyID *uuid.UUID) ([]domain.Tenant, error) {
+	query := `
+		SELECT t.id, t.organization_id, t.name, t.email, t.phone, t.room_id, t.monthly_fee, t.join_date, t.active, t.created_at
+		FROM tenants t
+		LEFT JOIN rooms r ON r.id = t.room_id
+		WHERE t.organization_id = $1`
+	args := []any{orgID}
+	if propertyID != nil {
+		query += ` AND r.property_id = $2`
+		args = append(args, *propertyID)
+	}
+	query += ` ORDER BY t.created_at`
+
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, mapPgError(err, "")
 	}
@@ -133,4 +143,35 @@ func (s *Store) GetTenantProfile(ctx context.Context, orgID, id uuid.UUID) (*dom
 	}
 	p.RoomNumber = roomNumber
 	return &p, nil
+}
+
+func (s *Store) ListTenantsForExport(ctx context.Context, orgID uuid.UUID, propertyID *uuid.UUID) ([]repository.TenantExportRow, error) {
+	query := `
+		SELECT t.id, t.name, t.email, t.phone, COALESCE(p.name, ''), r.room_number, t.monthly_fee, t.join_date::text, t.active
+		FROM tenants t
+		LEFT JOIN rooms r ON r.id = t.room_id
+		LEFT JOIN properties p ON p.id = r.property_id
+		WHERE t.organization_id = $1`
+	args := []any{orgID}
+	if propertyID != nil {
+		query += ` AND r.property_id = $2`
+		args = append(args, *propertyID)
+	}
+	query += ` ORDER BY p.name, t.name`
+
+	rows, err := s.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, mapPgError(err, "")
+	}
+	defer rows.Close()
+
+	var list []repository.TenantExportRow
+	for rows.Next() {
+		var row repository.TenantExportRow
+		if err := rows.Scan(&row.ID, &row.Name, &row.Email, &row.Phone, &row.PropertyName, &row.RoomNumber, &row.MonthlyFee, &row.JoinDate, &row.Active); err != nil {
+			return nil, apperror.Internal("scan tenant export", err)
+		}
+		list = append(list, row)
+	}
+	return list, rows.Err()
 }

@@ -11,6 +11,7 @@ import (
 )
 
 type settingsRepo struct{ *Store }
+type propertyRepo struct{ *Store }
 type staffRepo struct{ *Store }
 type passwordResetRepo struct{ *Store }
 type tenantPasswordResetRepo struct{ *Store }
@@ -21,22 +22,31 @@ type paymentRepo struct{ *Store }
 type expenseRepo struct{ *Store }
 type kitchenRepo struct{ *Store }
 type auditRepo struct{ *Store }
+type reminderRepo struct{ s *Store }
+type exportRepo struct{ s *Store }
+type documentRepo struct{ s *Store }
+type portalRepo struct{ s *Store }
 
 // NewStoreBundle wires all repository interfaces to PostgreSQL.
 func NewStoreBundle(pool *pgxpool.Pool) repository.Store {
 	s := NewStore(pool)
 	return repository.Store{
-		Settings:      &settingsRepo{s},
-		Staff:         &staffRepo{s},
+		Settings:            &settingsRepo{s},
+		Properties:            &propertyRepo{s},
+		Staff:               &staffRepo{s},
 		PasswordReset:       &passwordResetRepo{s},
 		TenantPasswordReset: &tenantPasswordResetRepo{s},
 		RefreshTokens:       &refreshTokenRepo{s},
 		Rooms:               &roomRepo{s},
-		Tenants:  &tenantRepo{s},
-		Payments: &paymentRepo{s},
-		Expenses: &expenseRepo{s},
+		Tenants:             &tenantRepo{s},
+		Payments:            &paymentRepo{s},
+		Expenses:            &expenseRepo{s},
 		Kitchen:             &kitchenRepo{s},
 		Audit:               &auditRepo{s},
+		Reminders:           &reminderRepo{s},
+		Export:              &exportRepo{s},
+		Documents:           &documentRepo{s},
+		Portal:              &portalRepo{s},
 	}
 }
 
@@ -46,6 +56,20 @@ func (r *settingsRepo) Get(ctx context.Context, orgID uuid.UUID) (*domain.Organi
 }
 func (r *settingsRepo) UpdateName(ctx context.Context, orgID uuid.UUID, name string) (*domain.Organization, error) {
 	return r.UpdateOrgName(ctx, orgID, name)
+}
+
+// Properties
+func (r *propertyRepo) List(ctx context.Context, orgID uuid.UUID) ([]domain.Property, error) {
+	return r.ListProperties(ctx, orgID)
+}
+func (r *propertyRepo) GetByID(ctx context.Context, orgID, id uuid.UUID) (*domain.Property, error) {
+	return r.GetPropertyByID(ctx, orgID, id)
+}
+func (r *propertyRepo) Create(ctx context.Context, property *domain.Property) error {
+	return r.CreateProperty(ctx, property)
+}
+func (r *propertyRepo) Update(ctx context.Context, orgID, id uuid.UUID, name string, address *string) (*domain.Property, error) {
+	return r.UpdateProperty(ctx, orgID, id, name, address)
 }
 
 // Staff
@@ -114,8 +138,8 @@ func (r *refreshTokenRepo) RevokeAllForUser(ctx context.Context, userType domain
 }
 
 // Rooms
-func (r *roomRepo) List(ctx context.Context, orgID uuid.UUID) ([]domain.Room, error) {
-	return r.ListRooms(ctx, orgID)
+func (r *roomRepo) List(ctx context.Context, orgID uuid.UUID, propertyID *uuid.UUID) ([]domain.Room, error) {
+	return r.ListRooms(ctx, orgID, propertyID)
 }
 func (r *roomRepo) Create(ctx context.Context, room *domain.Room) error {
 	return r.CreateRoom(ctx, room)
@@ -123,8 +147,8 @@ func (r *roomRepo) Create(ctx context.Context, room *domain.Room) error {
 func (r *roomRepo) GetByID(ctx context.Context, orgID, id uuid.UUID) (*domain.Room, error) {
 	return r.GetRoomByID(ctx, orgID, id)
 }
-func (r *roomRepo) GetByRoomNumber(ctx context.Context, orgID uuid.UUID, roomNumber string) (*domain.Room, error) {
-	return r.GetRoomByNumber(ctx, orgID, roomNumber)
+func (r *roomRepo) GetByRoomNumber(ctx context.Context, propertyID uuid.UUID, roomNumber string) (*domain.Room, error) {
+	return r.GetRoomByNumber(ctx, propertyID, roomNumber)
 }
 func (r *roomRepo) Delete(ctx context.Context, orgID, id uuid.UUID) error {
 	return r.DeleteRoom(ctx, orgID, id)
@@ -134,8 +158,8 @@ func (r *roomRepo) CountActiveTenants(ctx context.Context, orgID, roomID uuid.UU
 }
 
 // Tenants
-func (r *tenantRepo) List(ctx context.Context, orgID uuid.UUID) ([]domain.Tenant, error) {
-	return r.ListTenants(ctx, orgID)
+func (r *tenantRepo) List(ctx context.Context, orgID uuid.UUID, propertyID *uuid.UUID) ([]domain.Tenant, error) {
+	return r.ListTenants(ctx, orgID, propertyID)
 }
 func (r *tenantRepo) Create(ctx context.Context, tenant *domain.Tenant) error {
 	return r.CreateTenant(ctx, tenant)
@@ -169,8 +193,8 @@ func (r *tenantRepo) UpdatePassword(ctx context.Context, tenantID uuid.UUID, pas
 }
 
 // Payments
-func (r *paymentRepo) List(ctx context.Context, orgID uuid.UUID) ([]domain.Payment, error) {
-	return r.ListPayments(ctx, orgID)
+func (r *paymentRepo) List(ctx context.Context, orgID uuid.UUID, propertyID *uuid.UUID) ([]domain.Payment, error) {
+	return r.ListPayments(ctx, orgID, propertyID)
 }
 func (r *paymentRepo) Create(ctx context.Context, orgID uuid.UUID, payment *domain.Payment) error {
 	return r.CreatePayment(ctx, orgID, payment)
@@ -222,4 +246,101 @@ func (r *auditRepo) Create(ctx context.Context, orgID uuid.UUID, staffID *uuid.U
 }
 func (r *auditRepo) List(ctx context.Context, orgID uuid.UUID, limit int) ([]domain.StaffAuditLog, error) {
 	return r.ListStaffAuditLog(ctx, orgID, limit)
+}
+
+func (r *reminderRepo) ListActiveTenantsWithDues(ctx context.Context, orgID *uuid.UUID) ([]repository.ReminderTenantRow, error) {
+	return listActiveTenantsWithDues(r.s, ctx, orgID)
+}
+func (r *reminderRepo) HasRentReminder(ctx context.Context, tenantID uuid.UUID, forMonth, reminderType string) (bool, error) {
+	return r.s.HasRentReminder(ctx, tenantID, forMonth, reminderType)
+}
+func (r *reminderRepo) CreateRentReminder(ctx context.Context, tenantID uuid.UUID, forMonth, reminderType string) error {
+	return r.s.CreateRentReminder(ctx, tenantID, forMonth, reminderType)
+}
+func (r *reminderRepo) ListPaymentsForTenantMonth(ctx context.Context, tenantID uuid.UUID, forMonth string) ([]domain.Payment, error) {
+	return r.s.ListPaymentsForTenantMonth(ctx, tenantID, forMonth)
+}
+
+// Export
+func (r *exportRepo) ListPaymentsForExport(ctx context.Context, orgID uuid.UUID, propertyID *uuid.UUID) ([]repository.PaymentExportRow, error) {
+	return r.s.ListPaymentsForExport(ctx, orgID, propertyID)
+}
+func (r *exportRepo) ListTenantsForExport(ctx context.Context, orgID uuid.UUID, propertyID *uuid.UUID) ([]repository.TenantExportRow, error) {
+	return r.s.ListTenantsForExport(ctx, orgID, propertyID)
+}
+func (r *exportRepo) ListExpensesForExport(ctx context.Context, orgID uuid.UUID) ([]repository.ExpenseExportRow, error) {
+	return r.s.ListExpensesForExport(ctx, orgID)
+}
+func (r *exportRepo) GetPaymentReceiptData(ctx context.Context, orgID, paymentID uuid.UUID) (*repository.PaymentReceiptData, error) {
+	return r.s.GetPaymentReceiptData(ctx, orgID, paymentID)
+}
+
+// Documents
+func (r *documentRepo) CreateTenantDocument(ctx context.Context, doc *domain.TenantDocument, storageKey string) error {
+	return r.s.CreateTenantDocument(ctx, doc, storageKey)
+}
+func (r *documentRepo) ListTenantDocuments(ctx context.Context, orgID, tenantID uuid.UUID) ([]domain.TenantDocument, error) {
+	return r.s.ListTenantDocuments(ctx, orgID, tenantID)
+}
+func (r *documentRepo) GetTenantDocument(ctx context.Context, orgID, id uuid.UUID) (*domain.TenantDocument, string, error) {
+	return r.s.GetTenantDocument(ctx, orgID, id)
+}
+func (r *documentRepo) SoftDeleteTenantDocument(ctx context.Context, orgID, id uuid.UUID) (*domain.TenantDocument, string, error) {
+	return r.s.SoftDeleteTenantDocument(ctx, orgID, id)
+}
+func (r *documentRepo) CreateOrganizationDocument(ctx context.Context, doc *domain.OrganizationDocument, storageKey string) error {
+	return r.s.CreateOrganizationDocument(ctx, doc, storageKey)
+}
+func (r *documentRepo) ListOrganizationDocuments(ctx context.Context, orgID uuid.UUID, propertyID *uuid.UUID) ([]domain.OrganizationDocument, error) {
+	return r.s.ListOrganizationDocuments(ctx, orgID, propertyID)
+}
+func (r *documentRepo) GetOrganizationDocument(ctx context.Context, orgID, id uuid.UUID) (*domain.OrganizationDocument, string, error) {
+	return r.s.GetOrganizationDocument(ctx, orgID, id)
+}
+func (r *documentRepo) SoftDeleteOrganizationDocument(ctx context.Context, orgID, id uuid.UUID) (*domain.OrganizationDocument, string, error) {
+	return r.s.SoftDeleteOrganizationDocument(ctx, orgID, id)
+}
+
+// Portal
+func (r *portalRepo) ListAnnouncements(ctx context.Context, orgID uuid.UUID, propertyID *uuid.UUID, activeOnly bool) ([]domain.Announcement, error) {
+	return r.s.ListAnnouncements(ctx, orgID, propertyID, activeOnly)
+}
+func (r *portalRepo) GetAnnouncement(ctx context.Context, orgID, id uuid.UUID) (*domain.Announcement, error) {
+	return r.s.GetAnnouncement(ctx, orgID, id)
+}
+func (r *portalRepo) CreateAnnouncement(ctx context.Context, a *domain.Announcement) error {
+	return r.s.CreateAnnouncement(ctx, a)
+}
+func (r *portalRepo) UpdateAnnouncement(ctx context.Context, orgID, id uuid.UUID, a *domain.Announcement) (*domain.Announcement, error) {
+	return r.s.UpdateAnnouncement(ctx, orgID, id, a)
+}
+func (r *portalRepo) DeleteAnnouncement(ctx context.Context, orgID, id uuid.UUID) error {
+	return r.s.DeleteAnnouncement(ctx, orgID, id)
+}
+func (r *portalRepo) ListAnnouncementsForTenant(ctx context.Context, orgID, tenantID uuid.UUID) ([]domain.Announcement, error) {
+	return r.s.ListAnnouncementsForTenant(ctx, orgID, tenantID)
+}
+func (r *portalRepo) ListMaintenanceRequests(ctx context.Context, orgID uuid.UUID, propertyID *uuid.UUID, status *domain.MaintenanceStatus) ([]domain.MaintenanceRequest, error) {
+	return r.s.ListMaintenanceRequests(ctx, orgID, propertyID, status)
+}
+func (r *portalRepo) ListMaintenanceByTenant(ctx context.Context, orgID, tenantID uuid.UUID) ([]domain.MaintenanceRequest, error) {
+	return r.s.ListMaintenanceByTenant(ctx, orgID, tenantID)
+}
+func (r *portalRepo) GetMaintenanceRequest(ctx context.Context, orgID, id uuid.UUID) (*domain.MaintenanceRequest, error) {
+	return r.s.GetMaintenanceRequest(ctx, orgID, id)
+}
+func (r *portalRepo) CreateMaintenanceRequest(ctx context.Context, req *domain.MaintenanceRequest) error {
+	return r.s.CreateMaintenanceRequest(ctx, req)
+}
+func (r *portalRepo) UpdateMaintenanceRequest(ctx context.Context, orgID, id uuid.UUID, status domain.MaintenanceStatus, staffNote *string) (*domain.MaintenanceRequest, error) {
+	return r.s.UpdateMaintenanceRequest(ctx, orgID, id, status, staffNote)
+}
+func (r *portalRepo) ListVisitorLog(ctx context.Context, orgID uuid.UUID, propertyID *uuid.UUID, limit int) ([]domain.VisitorLogEntry, error) {
+	return r.s.ListVisitorLog(ctx, orgID, propertyID, limit)
+}
+func (r *portalRepo) CreateVisitorEntry(ctx context.Context, entry *domain.VisitorLogEntry) error {
+	return r.s.CreateVisitorEntry(ctx, entry)
+}
+func (r *portalRepo) RecordVisitorExit(ctx context.Context, orgID, id uuid.UUID, exitAt time.Time) (*domain.VisitorLogEntry, error) {
+	return r.s.RecordVisitorExit(ctx, orgID, id, exitAt)
 }

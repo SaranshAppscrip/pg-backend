@@ -22,8 +22,8 @@ func NewTenantService(repos repository.Store, audit *AuditService) *TenantServic
 	return &TenantService{repos: repos, audit: audit}
 }
 
-func (s *TenantService) List(ctx context.Context, orgID uuid.UUID) ([]domain.Tenant, error) {
-	return s.repos.Tenants.List(ctx, orgID)
+func (s *TenantService) List(ctx context.Context, orgID uuid.UUID, propertyID *uuid.UUID) ([]domain.Tenant, error) {
+	return s.repos.Tenants.List(ctx, orgID, propertyID)
 }
 
 type CreateTenantInput struct {

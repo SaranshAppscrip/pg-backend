@@ -16,6 +16,7 @@ import (
 	"github.com/nivas/server/internal/repository/postgres"
 	"github.com/nivas/server/internal/router"
 	"github.com/nivas/server/internal/service"
+	"github.com/nivas/server/internal/storage"
 	"github.com/nivas/server/pkg/logger"
 )
 
@@ -48,19 +49,33 @@ func main() {
 
 	authSvc := service.NewAuthService(repos, tokens, cfg.JWT, emailSender, cfg.Email)
 	auditSvc := service.NewAuditService(repos.Audit)
+	exportSvc := service.NewExportService(repos.Export)
+	reminderSvc := service.NewReminderService(repos.Reminders, emailSender, cfg.Reminder)
+	blobStore, err := storage.New(cfg.Storage)
+	if err != nil {
+		log.Error("init storage", "error", err)
+		os.Exit(1)
+	}
+	documentSvc := service.NewDocumentService(repos, blobStore, cfg.Storage)
+	portalSvc := service.NewPortalService(repos)
 	deps := router.Deps{
-		Config:   cfg,
-		Log:      log,
-		Tokens:   tokens,
-		Auth:     authSvc,
-		Settings: service.NewSettingsService(repos.Settings),
-		Rooms:    service.NewRoomService(repos),
-		Tenants:  service.NewTenantService(repos, auditSvc),
-		Payments: service.NewPaymentService(repos.Payments, auditSvc),
-		Expenses: service.NewExpenseService(repos.Expenses, auditSvc),
-		Kitchen:  service.NewKitchenService(repos.Kitchen),
-		Staff:    service.NewStaffService(repos.Staff, authSvc),
-		Audit:    auditSvc,
+		Config:     cfg,
+		Log:        log,
+		Tokens:     tokens,
+		Auth:       authSvc,
+		Settings:   service.NewSettingsService(repos.Settings),
+		Properties: service.NewPropertyService(repos.Properties),
+		Rooms:      service.NewRoomService(repos),
+		Tenants:    service.NewTenantService(repos, auditSvc),
+		Payments:   service.NewPaymentService(repos.Payments, repos.Export, auditSvc, emailSender),
+		Expenses:   service.NewExpenseService(repos.Expenses, auditSvc),
+		Kitchen:    service.NewKitchenService(repos.Kitchen),
+		Staff:      service.NewStaffService(repos.Staff, authSvc),
+		Audit:      auditSvc,
+		Export:     exportSvc,
+		Reminders:  reminderSvc,
+		Documents:  documentSvc,
+		Portal:     portalSvc,
 	}
 
 	engine := router.New(deps)

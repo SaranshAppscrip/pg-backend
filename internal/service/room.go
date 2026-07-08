@@ -20,19 +20,23 @@ func NewRoomService(repos repository.Store) *RoomService {
 	return &RoomService{repos: repos}
 }
 
-func (s *RoomService) List(ctx context.Context, orgID uuid.UUID) ([]domain.Room, error) {
-	return s.repos.Rooms.List(ctx, orgID)
+func (s *RoomService) List(ctx context.Context, orgID uuid.UUID, propertyID *uuid.UUID) ([]domain.Room, error) {
+	return s.repos.Rooms.List(ctx, orgID, propertyID)
 }
 
-func (s *RoomService) Create(ctx context.Context, orgID uuid.UUID, roomNumber string, capacity int) (*domain.Room, error) {
+func (s *RoomService) Create(ctx context.Context, orgID, propertyID uuid.UUID, roomNumber string, capacity int) (*domain.Room, error) {
 	log := logger.FromContext(ctx)
 	roomNumber = strings.TrimSpace(roomNumber)
 	if roomNumber == "" || capacity < 1 {
 		return nil, apperror.BadRequest("room_number and capacity (>= 1) are required")
 	}
 
-	if _, err := s.repos.Rooms.GetByRoomNumber(ctx, orgID, roomNumber); err == nil {
-		log.Warn("room create rejected", "organization_id", orgID, "room_number", roomNumber, "reason", "duplicate_room_number")
+	if _, err := s.repos.Properties.GetByID(ctx, orgID, propertyID); err != nil {
+		return nil, err
+	}
+
+	if _, err := s.repos.Rooms.GetByRoomNumber(ctx, propertyID, roomNumber); err == nil {
+		log.Warn("room create rejected", "organization_id", orgID, "property_id", propertyID, "room_number", roomNumber, "reason", "duplicate_room_number")
 		return nil, apperror.DuplicateRoomNumber()
 	} else if !apperror.IsNotFound(err) {
 		return nil, err
@@ -41,6 +45,7 @@ func (s *RoomService) Create(ctx context.Context, orgID uuid.UUID, roomNumber st
 	room := &domain.Room{
 		ID:             uuid.New(),
 		OrganizationID: orgID,
+		PropertyID:     propertyID,
 		RoomNumber:     roomNumber,
 		Capacity:       capacity,
 		CreatedAt:      time.Now(),
@@ -48,7 +53,7 @@ func (s *RoomService) Create(ctx context.Context, orgID uuid.UUID, roomNumber st
 	if err := s.repos.Rooms.Create(ctx, room); err != nil {
 		return nil, err
 	}
-	log.Info("room created", "organization_id", orgID, "room_id", room.ID, "room_number", roomNumber, "capacity", capacity)
+	log.Info("room created", "organization_id", orgID, "property_id", propertyID, "room_id", room.ID, "room_number", roomNumber, "capacity", capacity)
 	return room, nil
 }
 

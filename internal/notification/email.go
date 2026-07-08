@@ -3,6 +3,7 @@ package notification
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -28,9 +29,32 @@ type PasswordResetParams struct {
 	ForTenant bool
 }
 
+type RentReminderParams struct {
+	To           string
+	TenantName   string
+	PropertyName string
+	ForMonth     string
+	MonthlyFee   float64
+	Paid         float64
+	Due          float64
+	ReminderType string // due | overdue
+}
+
+type PaymentReceiptParams struct {
+	To       string
+	TenantName string
+	Subject  string
+	Text     string
+	HTML     string
+	PDF      []byte
+	Filename string
+}
+
 type EmailSender interface {
 	SendStaffInvite(ctx context.Context, p StaffInviteParams) error
 	SendPasswordReset(ctx context.Context, p PasswordResetParams) error
+	SendRentReminder(ctx context.Context, p RentReminderParams) error
+	SendPaymentReceipt(ctx context.Context, p PaymentReceiptParams) error
 }
 
 type resendSender struct {
@@ -54,22 +78,46 @@ func (s *resendSender) SendStaffInvite(ctx context.Context, p StaffInviteParams)
 	subject := fmt.Sprintf("You're invited to %s on Nivas", p.OrganizationName)
 	text := staffInviteText(p, loginURL)
 	htmlBody := staffInviteHTML(p, loginURL)
-	return s.send(ctx, p.To, subject, text, htmlBody)
+	return s.send(ctx, p.To, subject, text, htmlBody, nil)
 }
 
 func (s *resendSender) SendPasswordReset(ctx context.Context, p PasswordResetParams) error {
 	subject := "Reset your Nivas password"
 	text := passwordResetText(p)
 	htmlBody := passwordResetHTML(p)
-	return s.send(ctx, p.To, subject, text, htmlBody)
+	return s.send(ctx, p.To, subject, text, htmlBody, nil)
+}
+
+func (s *resendSender) SendRentReminder(ctx context.Context, p RentReminderParams) error {
+	subject := rentReminderSubject(p)
+	text := rentReminderText(p)
+	htmlBody := rentReminderHTML(p)
+	return s.send(ctx, p.To, subject, text, htmlBody, nil)
+}
+
+func (s *resendSender) SendPaymentReceipt(ctx context.Context, p PaymentReceiptParams) error {
+	var attachments []resendAttachment
+	if len(p.PDF) > 0 {
+		attachments = []resendAttachment{{
+			Filename: p.Filename,
+			Content:  base64.StdEncoding.EncodeToString(p.PDF),
+		}}
+	}
+	return s.send(ctx, p.To, p.Subject, p.Text, p.HTML, attachments)
+}
+
+type resendAttachment struct {
+	Filename string `json:"filename"`
+	Content  string `json:"content"`
 }
 
 type resendPayload struct {
-	From    string   `json:"from"`
-	To      []string `json:"to"`
-	Subject string   `json:"subject"`
-	Text    string   `json:"text"`
-	HTML    string   `json:"html"`
+	From        string             `json:"from"`
+	To          []string           `json:"to"`
+	Subject     string             `json:"subject"`
+	Text        string             `json:"text"`
+	HTML        string             `json:"html"`
+	Attachments []resendAttachment `json:"attachments,omitempty"`
 }
 
 type resendErrorBody struct {
@@ -98,7 +146,7 @@ func ResendErrorMessage(err error) string {
 	return ""
 }
 
-func (s *resendSender) send(ctx context.Context, to, subject, text, htmlBody string) error {
+func (s *resendSender) send(ctx context.Context, to, subject, text, htmlBody string, attachments []resendAttachment) error {
 	if s.cfg.ResendAPIKey == "" {
 		if s.appEnv == "development" {
 			s.log.Info("email (dev mode, not sent)",
@@ -123,11 +171,12 @@ func (s *resendSender) send(ctx context.Context, to, subject, text, htmlBody str
 	}
 
 	payload, err := json.Marshal(resendPayload{
-		From:    s.cfg.From,
-		To:      []string{actualTo},
-		Subject: subject,
-		Text:    text,
-		HTML:    htmlBody,
+		From:        s.cfg.From,
+		To:          []string{actualTo},
+		Subject:     subject,
+		Text:        text,
+		HTML:        htmlBody,
+		Attachments: attachments,
 	})
 	if err != nil {
 		return err

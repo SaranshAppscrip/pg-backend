@@ -12,18 +12,23 @@ import (
 )
 
 type Deps struct {
-	Config   *config.Config
-	Log      *slog.Logger
-	Tokens   *auth.TokenService
-	Auth     *service.AuthService
-	Settings *service.SettingsService
-	Rooms    *service.RoomService
-	Tenants  *service.TenantService
-	Payments *service.PaymentService
-	Expenses *service.ExpenseService
-	Kitchen  *service.KitchenService
-	Staff    *service.StaffService
-	Audit    *service.AuditService
+	Config    *config.Config
+	Log       *slog.Logger
+	Tokens    *auth.TokenService
+	Auth      *service.AuthService
+	Settings  *service.SettingsService
+	Properties *service.PropertyService
+	Rooms     *service.RoomService
+	Tenants   *service.TenantService
+	Payments  *service.PaymentService
+	Expenses  *service.ExpenseService
+	Kitchen   *service.KitchenService
+	Staff     *service.StaffService
+	Audit     *service.AuditService
+	Export    *service.ExportService
+	Reminders *service.ReminderService
+	Documents *service.DocumentService
+	Portal    *service.PortalService
 }
 
 func New(deps Deps) *gin.Engine {
@@ -39,6 +44,7 @@ func New(deps Deps) *gin.Engine {
 
 	h := handler.NewAuthHandler(deps.Auth)
 	settingsH := handler.NewSettingsHandler(deps.Settings)
+	propertyH := handler.NewPropertyHandler(deps.Properties)
 	roomH := handler.NewRoomHandler(deps.Rooms)
 	tenantH := handler.NewTenantHandler(deps.Tenants)
 	paymentH := handler.NewPaymentHandler(deps.Payments)
@@ -46,6 +52,10 @@ func New(deps Deps) *gin.Engine {
 	kitchenH := handler.NewKitchenHandler(deps.Kitchen)
 	staffH := handler.NewStaffHandler(deps.Staff)
 	auditH := handler.NewAuditHandler(deps.Audit)
+	exportH := handler.NewExportHandler(deps.Export)
+	reminderH := handler.NewReminderHandler(deps.Reminders)
+	documentH := handler.NewDocumentHandler(deps.Documents)
+	portalH := handler.NewPortalHandler(deps.Portal)
 
 	authRL := middleware.NewRateLimiter(deps.Config.RateLimit.AuthLimit, deps.Config.RateLimit.AuthWindow)
 
@@ -53,7 +63,6 @@ func New(deps Deps) *gin.Engine {
 
 	v1 := r.Group("/api/v1")
 	{
-		// Public auth (rate limited)
 		authRoutes := v1.Group("", authRL.Middleware())
 		{
 			authRoutes.POST("/auth/staff/login", h.StaffLogin)
@@ -66,13 +75,16 @@ func New(deps Deps) *gin.Engine {
 			authRoutes.POST("/auth/tenant/logout", h.TenantLogout)
 		}
 
-		// Staff routes
 		staff := v1.Group("", middleware.StaffAuth(deps.Tokens))
 		{
 			staff.GET("/auth/staff/me", h.StaffMe)
 
 			staff.GET("/settings", settingsH.Get)
 			staff.PATCH("/settings", settingsH.Update)
+
+			staff.GET("/properties", propertyH.List)
+			staff.POST("/properties", propertyH.Create)
+			staff.PATCH("/properties/:id", propertyH.Update)
 
 			staff.GET("/rooms", roomH.List)
 			staff.POST("/rooms", roomH.Create)
@@ -85,10 +97,38 @@ func New(deps Deps) *gin.Engine {
 			staff.GET("/payments", paymentH.List)
 			staff.POST("/payments", paymentH.Create)
 			staff.DELETE("/payments/:id", paymentH.Delete)
+			staff.GET("/payments/export", exportH.Payments)
 
 			staff.GET("/expenses", expenseH.List)
 			staff.POST("/expenses", expenseH.Create)
 			staff.DELETE("/expenses/:id", expenseH.Delete)
+			staff.GET("/expenses/export", exportH.Expenses)
+
+			staff.GET("/tenants/export", exportH.Tenants)
+
+			staff.POST("/reminders/run", reminderH.Run)
+
+			staff.GET("/tenants/:id/documents", documentH.ListTenantDocuments)
+			staff.POST("/tenants/:id/documents", documentH.UploadTenantDocument)
+			staff.GET("/tenant-documents/:id/download", documentH.DownloadTenantDocument)
+			staff.DELETE("/tenant-documents/:id", documentH.DeleteTenantDocument)
+
+			staff.GET("/organization-documents", documentH.ListOrganizationDocuments)
+			staff.POST("/organization-documents", documentH.UploadOrganizationDocument)
+			staff.GET("/organization-documents/:id/download", documentH.DownloadOrganizationDocument)
+			staff.DELETE("/organization-documents/:id", documentH.DeleteOrganizationDocument)
+
+			staff.GET("/announcements", portalH.ListAnnouncements)
+			staff.POST("/announcements", portalH.CreateAnnouncement)
+			staff.PATCH("/announcements/:id", portalH.UpdateAnnouncement)
+			staff.DELETE("/announcements/:id", portalH.DeleteAnnouncement)
+
+			staff.GET("/maintenance-requests", portalH.ListMaintenance)
+			staff.PATCH("/maintenance-requests/:id", portalH.UpdateMaintenance)
+
+			staff.GET("/visitor-log", portalH.ListVisitors)
+			staff.POST("/visitor-log", portalH.CreateVisitorEntry)
+			staff.POST("/visitor-log/:id/exit", portalH.RecordVisitorExit)
 
 			staff.GET("/kitchen/items", kitchenH.ListItems)
 			staff.POST("/kitchen/items", kitchenH.CreateItem)
@@ -103,11 +143,13 @@ func New(deps Deps) *gin.Engine {
 			staff.DELETE("/staff/:id", staffH.Remove)
 		}
 
-		// Tenant routes
 		tenant := v1.Group("", middleware.TenantAuth(deps.Tokens))
 		{
 			tenant.GET("/auth/tenant/me", h.TenantMe)
 			tenant.GET("/tenant/payments", paymentH.TenantPayments)
+			tenant.GET("/tenant/announcements", portalH.TenantAnnouncements)
+			tenant.GET("/tenant/maintenance-requests", portalH.TenantMaintenance)
+			tenant.POST("/tenant/maintenance-requests", portalH.CreateMaintenance)
 		}
 	}
 

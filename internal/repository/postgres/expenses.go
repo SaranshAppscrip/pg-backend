@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nivas/server/internal/domain"
+	"github.com/nivas/server/internal/repository"
 	"github.com/nivas/server/pkg/apperror"
 )
 
@@ -50,4 +51,27 @@ func (s *Store) SoftDeleteExpense(ctx context.Context, orgID, id uuid.UUID) (*do
 		return nil, mapPgError(err, "expense not found")
 	}
 	return &e, nil
+}
+
+func (s *Store) ListExpensesForExport(ctx context.Context, orgID uuid.UUID) ([]repository.ExpenseExportRow, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, date::text, category::text, amount, note
+		FROM expenses
+		WHERE organization_id = $1 AND deleted_at IS NULL
+		ORDER BY date DESC, created_at DESC
+	`, orgID)
+	if err != nil {
+		return nil, mapPgError(err, "")
+	}
+	defer rows.Close()
+
+	var list []repository.ExpenseExportRow
+	for rows.Next() {
+		var row repository.ExpenseExportRow
+		if err := rows.Scan(&row.ID, &row.Date, &row.Category, &row.Amount, &row.Note); err != nil {
+			return nil, apperror.Internal("scan expense export", err)
+		}
+		list = append(list, row)
+	}
+	return list, rows.Err()
 }

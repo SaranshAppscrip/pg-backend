@@ -1,10 +1,14 @@
-.PHONY: run build test tidy migrate bootstrap docker-up docker-down
+.PHONY: run cron build test tidy migrate migrate-properties bootstrap docker-up docker-down
 
 run:
 	go run ./cmd/api
 
+cron:
+	go run ./cmd/cron
+
 build:
 	go build -o bin/nivas-api ./cmd/api
+	go build -o bin/nivas-cron ./cmd/cron
 
 test:
 	go test ./...

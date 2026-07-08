@@ -16,8 +16,10 @@ type Config struct {
 	Database  DatabaseConfig
 	JWT       JWTConfig
 	CORS      CORSConfig
-	Email     EmailConfig
+	Email    EmailConfig
 	RateLimit RateLimitConfig
+	Reminder ReminderConfig
+	Storage  StorageConfig
 }
 
 type AppConfig struct {
@@ -58,9 +60,28 @@ type EmailConfig struct {
 	DevRedirectTo    string // development: send all mail here (Resend sandbox allows only account email)
 }
 
+type ReminderConfig struct {
+	DueDay     int
+	OverdueDay int
+	CronSpec   string
+}
+
 type RateLimitConfig struct {
 	AuthLimit  int
 	AuthWindow time.Duration
+}
+
+type StorageConfig struct {
+	Driver       string // local | s3
+	LocalPath    string
+	Endpoint     string
+	Bucket       string
+	AccessKey    string
+	SecretKey    string
+	Region       string
+	UsePathStyle bool
+	MaxUploadBytes int64
+	PresignTTL   time.Duration
 }
 
 // Load reads configuration from environment variables.
@@ -113,6 +134,23 @@ func Load() (*Config, error) {
 		RateLimit: RateLimitConfig{
 			AuthLimit:  getEnvInt("RATE_LIMIT_AUTH_REQUESTS", 10),
 			AuthWindow: getEnvDuration("RATE_LIMIT_AUTH_WINDOW", time.Minute),
+		},
+		Reminder: ReminderConfig{
+			DueDay:     getEnvInt("RENT_REMINDER_DUE_DAY", 5),
+			OverdueDay: getEnvInt("RENT_REMINDER_OVERDUE_DAY", 10),
+			CronSpec:   getEnv("RENT_REMINDER_CRON", "0 9 * * *"),
+		},
+		Storage: StorageConfig{
+			Driver:         getEnv("STORAGE_DRIVER", "local"),
+			LocalPath:      getEnv("STORAGE_LOCAL_PATH", "./data/documents"),
+			Endpoint:       getEnv("S3_ENDPOINT", ""),
+			Bucket:         getEnv("S3_BUCKET", ""),
+			AccessKey:      getEnv("S3_ACCESS_KEY", ""),
+			SecretKey:      getEnv("S3_SECRET_KEY", ""),
+			Region:         getEnv("S3_REGION", "us-east-1"),
+			UsePathStyle:   getEnv("S3_USE_PATH_STYLE", "true") == "true",
+			MaxUploadBytes: int64(getEnvInt("MAX_UPLOAD_BYTES", 10*1024*1024)),
+			PresignTTL:     getEnvDuration("S3_PRESIGN_TTL", 15*time.Minute),
 		},
 	}
 

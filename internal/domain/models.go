@@ -84,9 +84,19 @@ type StaffProfile struct {
 type Room struct {
 	ID             uuid.UUID `json:"id"`
 	OrganizationID uuid.UUID `json:"organization_id"`
+	PropertyID     uuid.UUID `json:"property_id"`
 	RoomNumber     string    `json:"room_number"`
 	Capacity       int       `json:"capacity"`
 	CreatedAt      time.Time `json:"created_at"`
+}
+
+type Property struct {
+	ID             uuid.UUID `json:"id"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+	Name           string    `json:"name"`
+	Address        *string   `json:"address"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 type Tenant struct {
@@ -184,6 +194,138 @@ type TenantProfile struct {
 	MonthlyFee     float64   `json:"monthly_fee"`
 	JoinDate       time.Time `json:"join_date"`
 	RoomNumber     *string   `json:"room_number"`
+}
+
+// ── Documents ────────────────────────────────────────────────────────────────
+
+type TenantDocumentType string
+
+const (
+	TenantDocIDProof            TenantDocumentType = "id_proof"
+	TenantDocLeaseAgreement     TenantDocumentType = "lease_agreement"
+	TenantDocPoliceVerification TenantDocumentType = "police_verification"
+	TenantDocPhoto              TenantDocumentType = "photo"
+	TenantDocOther              TenantDocumentType = "other"
+)
+
+type OrganizationDocumentType string
+
+const (
+	OrgDocPGRegistration  OrganizationDocumentType = "pg_registration"
+	OrgDocFireSafetyNOC   OrganizationDocumentType = "fire_safety_noc"
+	OrgDocPolicePermission OrganizationDocumentType = "police_permission"
+	OrgDocTradeLicense    OrganizationDocumentType = "trade_license"
+	OrgDocPropertyTax     OrganizationDocumentType = "property_tax"
+	OrgDocOther           OrganizationDocumentType = "other"
+)
+
+type TenantDocument struct {
+	ID               uuid.UUID          `json:"id"`
+	OrganizationID   uuid.UUID          `json:"organization_id"`
+	TenantID         uuid.UUID          `json:"tenant_id"`
+	DocumentType     TenantDocumentType `json:"document_type"`
+	Title            *string            `json:"title"`
+	OriginalFilename string             `json:"original_filename"`
+	ContentType      string             `json:"content_type"`
+	SizeBytes        int64              `json:"size_bytes"`
+	UploadedBy       *uuid.UUID         `json:"uploaded_by"`
+	ExpiresAt        *time.Time         `json:"expires_at"`
+	CreatedAt        time.Time          `json:"created_at"`
+}
+
+type OrganizationDocument struct {
+	ID               uuid.UUID                `json:"id"`
+	OrganizationID   uuid.UUID                `json:"organization_id"`
+	PropertyID       *uuid.UUID               `json:"property_id"`
+	DocumentType     OrganizationDocumentType `json:"document_type"`
+	Title            *string                  `json:"title"`
+	OriginalFilename string                   `json:"original_filename"`
+	ContentType      string                   `json:"content_type"`
+	SizeBytes        int64                    `json:"size_bytes"`
+	UploadedBy       *uuid.UUID               `json:"uploaded_by"`
+	ExpiresAt        *time.Time               `json:"expires_at"`
+	CreatedAt        time.Time                `json:"created_at"`
+}
+
+// ── Portal (announcements, maintenance, visitors) ────────────────────────────
+
+type AnnouncementCategory string
+
+const (
+	AnnouncementMaintenance AnnouncementCategory = "maintenance"
+	AnnouncementHoliday     AnnouncementCategory = "holiday"
+	AnnouncementRules       AnnouncementCategory = "rules"
+	AnnouncementGeneral     AnnouncementCategory = "general"
+)
+
+type Announcement struct {
+	ID             uuid.UUID            `json:"id"`
+	OrganizationID uuid.UUID            `json:"organization_id"`
+	PropertyID     *uuid.UUID           `json:"property_id"`
+	Title          string               `json:"title"`
+	Body           string               `json:"body"`
+	Category       AnnouncementCategory `json:"category"`
+	Pinned         bool                 `json:"pinned"`
+	Published      bool                 `json:"published"`
+	ExpiresAt      *time.Time           `json:"expires_at"`
+	CreatedBy      *uuid.UUID           `json:"created_by"`
+	CreatedAt      time.Time            `json:"created_at"`
+	UpdatedAt      time.Time            `json:"updated_at"`
+}
+
+type MaintenanceCategory string
+
+const (
+	MaintenanceElectrical MaintenanceCategory = "electrical"
+	MaintenancePlumbing   MaintenanceCategory = "plumbing"
+	MaintenanceWifi       MaintenanceCategory = "wifi"
+	MaintenanceCleaning     MaintenanceCategory = "cleaning"
+	MaintenanceOther        MaintenanceCategory = "other"
+)
+
+type MaintenanceStatus string
+
+const (
+	MaintenanceOpen       MaintenanceStatus = "open"
+	MaintenanceInProgress MaintenanceStatus = "in_progress"
+	MaintenanceResolved   MaintenanceStatus = "resolved"
+	MaintenanceClosed     MaintenanceStatus = "closed"
+)
+
+type MaintenanceRequest struct {
+	ID             uuid.UUID           `json:"id"`
+	OrganizationID uuid.UUID           `json:"organization_id"`
+	TenantID       uuid.UUID           `json:"tenant_id"`
+	TenantName     string              `json:"tenant_name,omitempty"`
+	RoomNumber     *string             `json:"room_number,omitempty"`
+	Category       MaintenanceCategory `json:"category"`
+	Title          string              `json:"title"`
+	Description    string              `json:"description"`
+	Status         MaintenanceStatus   `json:"status"`
+	StaffNote      *string             `json:"staff_note"`
+	ResolvedAt     *time.Time          `json:"resolved_at"`
+	CreatedAt      time.Time           `json:"created_at"`
+	UpdatedAt      time.Time           `json:"updated_at"`
+}
+
+type VisitorLogEntry struct {
+	ID             uuid.UUID  `json:"id"`
+	OrganizationID uuid.UUID  `json:"organization_id"`
+	PropertyID     uuid.UUID  `json:"property_id"`
+	PropertyName   string     `json:"property_name,omitempty"`
+	TenantID       *uuid.UUID `json:"tenant_id"`
+	TenantName     *string    `json:"tenant_name,omitempty"`
+	RoomNumber     *string    `json:"room_number,omitempty"`
+	VisitorName    string     `json:"visitor_name"`
+	VisitorPhone   *string    `json:"visitor_phone"`
+	Purpose        *string    `json:"purpose"`
+	IDType         *string    `json:"id_type"`
+	IDNumber       *string    `json:"id_number"`
+	EntryAt        time.Time  `json:"entry_at"`
+	ExitAt         *time.Time `json:"exit_at"`
+	LoggedBy       *uuid.UUID `json:"logged_by"`
+	Notes          *string    `json:"notes"`
+	CreatedAt      time.Time  `json:"created_at"`
 }
 
 // ── Auth claims ──────────────────────────────────────────────────────────────
