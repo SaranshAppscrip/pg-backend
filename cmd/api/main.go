@@ -57,7 +57,7 @@ func main() {
 		os.Exit(1)
 	}
 	documentSvc := service.NewDocumentService(repos, blobStore, cfg.Storage)
-	portalSvc := service.NewPortalService(repos)
+	portalSvc := service.NewPortalService(repos, emailSender, cfg.Email.FrontendURL, cfg.JWT.Secret, log)
 	deps := router.Deps{
 		Config:     cfg,
 		Log:        log,

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	fieldcrypto "github.com/nivas/server/internal/crypto"
 	"github.com/nivas/server/internal/domain"
 	"github.com/nivas/server/pkg/apperror"
 )
@@ -113,13 +114,28 @@ func (s *Store) DeleteAnnouncement(ctx context.Context, orgID, id uuid.UUID) err
 	return nil
 }
 
-func (s *Store) ListMaintenanceRequests(ctx context.Context, orgID uuid.UUID, propertyID *uuid.UUID, status *domain.MaintenanceStatus) ([]domain.MaintenanceRequest, error) {
-	query := `
-		SELECT m.id, m.organization_id, m.tenant_id, t.name, rm.room_number,
-		       m.category, m.title, m.description, m.status, m.staff_note, m.resolved_at, m.created_at, m.updated_at
-		FROM maintenance_requests m
+func maintenanceOrderClause() string {
+	return ` ORDER BY CASE m.priority
+		WHEN 'urgent' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1
+	END DESC, m.created_at DESC`
+}
+
+func maintenanceSelectColumns() string {
+	return `m.id, m.organization_id, m.tenant_id, t.name, rm.room_number,
+		m.category, m.title, m.description, m.status, m.priority, m.assigned_to, s.full_name,
+		m.staff_note, m.resolved_at, m.created_at, m.updated_at`
+}
+
+func maintenanceJoins() string {
+	return `FROM maintenance_requests m
 		JOIN tenants t ON t.id = m.tenant_id
 		LEFT JOIN rooms rm ON rm.id = t.room_id
+		LEFT JOIN staff s ON s.id = m.assigned_to`
+}
+
+func (s *Store) ListMaintenanceRequests(ctx context.Context, orgID uuid.UUID, propertyID *uuid.UUID, status *domain.MaintenanceStatus) ([]domain.MaintenanceRequest, error) {
+	query := `SELECT ` + maintenanceSelectColumns() + `
+		` + maintenanceJoins() + `
 		WHERE m.organization_id = $1`
 	args := []any{orgID}
 	idx := 2
@@ -133,7 +149,7 @@ func (s *Store) ListMaintenanceRequests(ctx context.Context, orgID uuid.UUID, pr
 		args = append(args, *status)
 		idx++
 	}
-	query += ` ORDER BY m.created_at DESC`
+	query += maintenanceOrderClause()
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -145,11 +161,8 @@ func (s *Store) ListMaintenanceRequests(ctx context.Context, orgID uuid.UUID, pr
 
 func (s *Store) ListMaintenanceByTenant(ctx context.Context, orgID, tenantID uuid.UUID) ([]domain.MaintenanceRequest, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT m.id, m.organization_id, m.tenant_id, t.name, rm.room_number,
-		       m.category, m.title, m.description, m.status, m.staff_note, m.resolved_at, m.created_at, m.updated_at
-		FROM maintenance_requests m
-		JOIN tenants t ON t.id = m.tenant_id
-		LEFT JOIN rooms rm ON rm.id = t.room_id
+		SELECT `+maintenanceSelectColumns()+`
+		`+maintenanceJoins()+`
 		WHERE m.organization_id = $1 AND m.tenant_id = $2
 		ORDER BY m.created_at DESC
 	`, orgID, tenantID)
@@ -163,15 +176,13 @@ func (s *Store) ListMaintenanceByTenant(ctx context.Context, orgID, tenantID uui
 func (s *Store) GetMaintenanceRequest(ctx context.Context, orgID, id uuid.UUID) (*domain.MaintenanceRequest, error) {
 	var m domain.MaintenanceRequest
 	err := s.pool.QueryRow(ctx, `
-		SELECT m.id, m.organization_id, m.tenant_id, t.name, rm.room_number,
-		       m.category, m.title, m.description, m.status, m.staff_note, m.resolved_at, m.created_at, m.updated_at
-		FROM maintenance_requests m
-		JOIN tenants t ON t.id = m.tenant_id
-		LEFT JOIN rooms rm ON rm.id = t.room_id
+		SELECT `+maintenanceSelectColumns()+`
+		`+maintenanceJoins()+`
 		WHERE m.organization_id = $1 AND m.id = $2
 	`, orgID, id).Scan(
 		&m.ID, &m.OrganizationID, &m.TenantID, &m.TenantName, &m.RoomNumber,
-		&m.Category, &m.Title, &m.Description, &m.Status, &m.StaffNote, &m.ResolvedAt, &m.CreatedAt, &m.UpdatedAt,
+		&m.Category, &m.Title, &m.Description, &m.Status, &m.Priority, &m.AssignedTo, &m.AssignedToName,
+		&m.StaffNote, &m.ResolvedAt, &m.CreatedAt, &m.UpdatedAt,
 	)
 	if err != nil {
 		return nil, mapPgError(err, "maintenance request")
@@ -180,32 +191,39 @@ func (s *Store) GetMaintenanceRequest(ctx context.Context, orgID, id uuid.UUID) 
 }
 
 func (s *Store) CreateMaintenanceRequest(ctx context.Context, req *domain.MaintenanceRequest) error {
+	if req.Priority == "" {
+		req.Priority = domain.MaintenancePriorityMedium
+	}
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO maintenance_requests (id, organization_id, tenant_id, category, title, description, status)
-		VALUES ($1,$2,$3,$4,$5,$6,$7)
+		INSERT INTO maintenance_requests (id, organization_id, tenant_id, category, title, description, status, priority)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 		RETURNING created_at, updated_at
-	`, req.ID, req.OrganizationID, req.TenantID, req.Category, req.Title, req.Description, req.Status,
+	`, req.ID, req.OrganizationID, req.TenantID, req.Category, req.Title, req.Description, req.Status, req.Priority,
 	).Scan(&req.CreatedAt, &req.UpdatedAt)
 	return mapPgError(err, "maintenance request")
 }
 
-func (s *Store) UpdateMaintenanceRequest(ctx context.Context, orgID, id uuid.UUID, status domain.MaintenanceStatus, staffNote *string) (*domain.MaintenanceRequest, error) {
+func (s *Store) UpdateMaintenanceRequest(ctx context.Context, orgID, id uuid.UUID, upd domain.MaintenanceUpdate) (*domain.MaintenanceRequest, error) {
 	var resolvedAt *time.Time
-	if status == domain.MaintenanceResolved || status == domain.MaintenanceClosed {
+	if upd.Status == domain.MaintenanceResolved || upd.Status == domain.MaintenanceClosed {
 		now := time.Now()
 		resolvedAt = &now
 	}
 	var m domain.MaintenanceRequest
 	err := s.pool.QueryRow(ctx, `
-		UPDATE maintenance_requests SET status = $3, staff_note = $4, resolved_at = $5, updated_at = NOW()
+		UPDATE maintenance_requests SET
+			status = $3, priority = $4, assigned_to = $5, staff_note = $6, resolved_at = $7, updated_at = NOW()
 		WHERE organization_id = $1 AND id = $2
 		RETURNING id, organization_id, tenant_id,
 		          (SELECT name FROM tenants WHERE id = maintenance_requests.tenant_id),
 		          (SELECT r.room_number FROM tenants t JOIN rooms r ON r.id = t.room_id WHERE t.id = maintenance_requests.tenant_id),
-		          category, title, description, status, staff_note, resolved_at, created_at, updated_at
-	`, orgID, id, status, staffNote, resolvedAt).Scan(
+		          category, title, description, status, priority, assigned_to,
+		          (SELECT full_name FROM staff WHERE id = maintenance_requests.assigned_to),
+		          staff_note, resolved_at, created_at, updated_at
+	`, orgID, id, upd.Status, upd.Priority, upd.AssignedTo, upd.StaffNote, resolvedAt).Scan(
 		&m.ID, &m.OrganizationID, &m.TenantID, &m.TenantName, &m.RoomNumber,
-		&m.Category, &m.Title, &m.Description, &m.Status, &m.StaffNote, &m.ResolvedAt, &m.CreatedAt, &m.UpdatedAt,
+		&m.Category, &m.Title, &m.Description, &m.Status, &m.Priority, &m.AssignedTo, &m.AssignedToName,
+		&m.StaffNote, &m.ResolvedAt, &m.CreatedAt, &m.UpdatedAt,
 	)
 	if err != nil {
 		return nil, mapPgError(err, "maintenance request")
@@ -219,7 +237,7 @@ func (s *Store) ListVisitorLog(ctx context.Context, orgID uuid.UUID, propertyID 
 	}
 	query := `
 		SELECT v.id, v.organization_id, v.property_id, p.name, v.tenant_id, t.name, rm.room_number,
-		       v.visitor_name, v.visitor_phone, v.purpose, v.id_type, v.id_number,
+		       v.visitor_name, v.visitor_phone, v.purpose, v.id_type, v.id_number_last4,
 		       v.entry_at, v.exit_at, v.logged_by, v.notes, v.created_at
 		FROM visitor_log v
 		JOIN properties p ON p.id = v.property_id
@@ -248,17 +266,18 @@ func (s *Store) CreateVisitorEntry(ctx context.Context, entry *domain.VisitorLog
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO visitor_log (
 			id, organization_id, property_id, tenant_id, visitor_name, visitor_phone,
-			purpose, id_type, id_number, entry_at, logged_by, notes
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+			purpose, id_type, id_number_encrypted, id_number_last4, entry_at, logged_by, notes
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 		RETURNING created_at
 	`, entry.ID, entry.OrganizationID, entry.PropertyID, entry.TenantID, entry.VisitorName, entry.VisitorPhone,
-		entry.Purpose, entry.IDType, entry.IDNumber, entry.EntryAt, entry.LoggedBy, entry.Notes,
+		entry.Purpose, entry.IDType, entry.IDNumberEncrypted, entry.IDNumberLast4, entry.EntryAt, entry.LoggedBy, entry.Notes,
 	).Scan(&entry.CreatedAt)
 	return mapPgError(err, "visitor log")
 }
 
 func (s *Store) RecordVisitorExit(ctx context.Context, orgID, id uuid.UUID, exitAt time.Time) (*domain.VisitorLogEntry, error) {
 	var v domain.VisitorLogEntry
+	var idLast4 *string
 	err := s.pool.QueryRow(ctx, `
 		UPDATE visitor_log SET exit_at = $3
 		WHERE organization_id = $1 AND id = $2 AND exit_at IS NULL
@@ -267,16 +286,17 @@ func (s *Store) RecordVisitorExit(ctx context.Context, orgID, id uuid.UUID, exit
 		          tenant_id,
 		          (SELECT name FROM tenants WHERE id = visitor_log.tenant_id),
 		          (SELECT r.room_number FROM tenants t JOIN rooms r ON r.id = t.room_id WHERE t.id = visitor_log.tenant_id),
-		          visitor_name, visitor_phone, purpose, id_type, id_number,
+		          visitor_name, visitor_phone, purpose, id_type, id_number_last4,
 		          entry_at, exit_at, logged_by, notes, created_at
 	`, orgID, id, exitAt).Scan(
 		&v.ID, &v.OrganizationID, &v.PropertyID, &v.PropertyName, &v.TenantID, &v.TenantName, &v.RoomNumber,
-		&v.VisitorName, &v.VisitorPhone, &v.Purpose, &v.IDType, &v.IDNumber,
+		&v.VisitorName, &v.VisitorPhone, &v.Purpose, &v.IDType, &idLast4,
 		&v.EntryAt, &v.ExitAt, &v.LoggedBy, &v.Notes, &v.CreatedAt,
 	)
 	if err != nil {
 		return nil, mapPgError(err, "visitor log")
 	}
+	v.IDNumber = maskVisitorIDNumber(idLast4)
 	return &v, nil
 }
 
@@ -309,7 +329,8 @@ func scanMaintenance(rows interface {
 		var m domain.MaintenanceRequest
 		if err := rows.Scan(
 			&m.ID, &m.OrganizationID, &m.TenantID, &m.TenantName, &m.RoomNumber,
-			&m.Category, &m.Title, &m.Description, &m.Status, &m.StaffNote, &m.ResolvedAt, &m.CreatedAt, &m.UpdatedAt,
+			&m.Category, &m.Title, &m.Description, &m.Status, &m.Priority, &m.AssignedTo, &m.AssignedToName,
+			&m.StaffNote, &m.ResolvedAt, &m.CreatedAt, &m.UpdatedAt,
 		); err != nil {
 			return nil, apperror.Internal("scan maintenance", err)
 		}
@@ -326,14 +347,24 @@ func scanVisitors(rows interface {
 	var list []domain.VisitorLogEntry
 	for rows.Next() {
 		var v domain.VisitorLogEntry
+		var idLast4 *string
 		if err := rows.Scan(
 			&v.ID, &v.OrganizationID, &v.PropertyID, &v.PropertyName, &v.TenantID, &v.TenantName, &v.RoomNumber,
-			&v.VisitorName, &v.VisitorPhone, &v.Purpose, &v.IDType, &v.IDNumber,
+			&v.VisitorName, &v.VisitorPhone, &v.Purpose, &v.IDType, &idLast4,
 			&v.EntryAt, &v.ExitAt, &v.LoggedBy, &v.Notes, &v.CreatedAt,
 		); err != nil {
 			return nil, apperror.Internal("scan visitor", err)
 		}
+		v.IDNumber = maskVisitorIDNumber(idLast4)
 		list = append(list, v)
 	}
 	return list, rows.Err()
+}
+
+func maskVisitorIDNumber(last4 *string) *string {
+	if last4 == nil || *last4 == "" {
+		return nil
+	}
+	masked := fieldcrypto.MaskIDNumber(*last4)
+	return &masked
 }

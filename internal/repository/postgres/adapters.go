@@ -332,8 +332,8 @@ func (r *portalRepo) GetMaintenanceRequest(ctx context.Context, orgID, id uuid.U
 func (r *portalRepo) CreateMaintenanceRequest(ctx context.Context, req *domain.MaintenanceRequest) error {
 	return r.s.CreateMaintenanceRequest(ctx, req)
 }
-func (r *portalRepo) UpdateMaintenanceRequest(ctx context.Context, orgID, id uuid.UUID, status domain.MaintenanceStatus, staffNote *string) (*domain.MaintenanceRequest, error) {
-	return r.s.UpdateMaintenanceRequest(ctx, orgID, id, status, staffNote)
+func (r *portalRepo) UpdateMaintenanceRequest(ctx context.Context, orgID, id uuid.UUID, upd domain.MaintenanceUpdate) (*domain.MaintenanceRequest, error) {
+	return r.s.UpdateMaintenanceRequest(ctx, orgID, id, upd)
 }
 func (r *portalRepo) ListVisitorLog(ctx context.Context, orgID uuid.UUID, propertyID *uuid.UUID, limit int) ([]domain.VisitorLogEntry, error) {
 	return r.s.ListVisitorLog(ctx, orgID, propertyID, limit)

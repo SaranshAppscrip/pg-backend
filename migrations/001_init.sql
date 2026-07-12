@@ -284,6 +284,7 @@ CREATE INDEX idx_announcements_org ON announcements(organization_id, published, 
 -- Maintenance / complaint requests
 CREATE TYPE maintenance_category AS ENUM ('electrical', 'plumbing', 'wifi', 'cleaning', 'other');
 CREATE TYPE maintenance_status AS ENUM ('open', 'in_progress', 'resolved', 'closed');
+CREATE TYPE maintenance_priority AS ENUM ('low', 'medium', 'high', 'urgent');
 
 CREATE TABLE maintenance_requests (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -293,6 +294,8 @@ CREATE TABLE maintenance_requests (
   title           TEXT NOT NULL,
   description     TEXT NOT NULL,
   status          maintenance_status NOT NULL DEFAULT 'open',
+  priority        maintenance_priority NOT NULL DEFAULT 'medium',
+  assigned_to     UUID REFERENCES staff(id) ON DELETE SET NULL,
   staff_note      TEXT,
   resolved_at     TIMESTAMPTZ,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -301,6 +304,7 @@ CREATE TABLE maintenance_requests (
 
 CREATE INDEX idx_maintenance_org_status ON maintenance_requests(organization_id, status, created_at DESC);
 CREATE INDEX idx_maintenance_tenant ON maintenance_requests(tenant_id);
+CREATE INDEX idx_maintenance_assigned ON maintenance_requests(assigned_to) WHERE assigned_to IS NOT NULL;
 
 -- Visitor log
 CREATE TABLE visitor_log (
@@ -310,10 +314,11 @@ CREATE TABLE visitor_log (
   tenant_id       UUID REFERENCES tenants(id) ON DELETE SET NULL,
   visitor_name    TEXT NOT NULL,
   visitor_phone   TEXT,
-  purpose         TEXT,
-  id_type         TEXT,
-  id_number       TEXT,
-  entry_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  purpose             TEXT,
+  id_type             TEXT,
+  id_number_encrypted TEXT,
+  id_number_last4     TEXT,
+  entry_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   exit_at         TIMESTAMPTZ,
   logged_by       UUID REFERENCES staff(id) ON DELETE SET NULL,
   notes           TEXT,

@@ -50,11 +50,21 @@ type PaymentReceiptParams struct {
 	Filename string
 }
 
+type MaintenanceAlertParams struct {
+	To         string
+	TenantName string
+	Title      string
+	Category   string
+	RoomNumber *string
+	OpsURL     string
+}
+
 type EmailSender interface {
 	SendStaffInvite(ctx context.Context, p StaffInviteParams) error
 	SendPasswordReset(ctx context.Context, p PasswordResetParams) error
 	SendRentReminder(ctx context.Context, p RentReminderParams) error
 	SendPaymentReceipt(ctx context.Context, p PaymentReceiptParams) error
+	SendMaintenanceAlert(ctx context.Context, p MaintenanceAlertParams) error
 }
 
 type resendSender struct {
@@ -104,6 +114,13 @@ func (s *resendSender) SendPaymentReceipt(ctx context.Context, p PaymentReceiptP
 		}}
 	}
 	return s.send(ctx, p.To, p.Subject, p.Text, p.HTML, attachments)
+}
+
+func (s *resendSender) SendMaintenanceAlert(ctx context.Context, p MaintenanceAlertParams) error {
+	subject := fmt.Sprintf("New maintenance request: %s", p.Title)
+	text := maintenanceAlertText(p)
+	htmlBody := maintenanceAlertHTML(p)
+	return s.send(ctx, p.To, subject, text, htmlBody, nil)
 }
 
 type resendAttachment struct {

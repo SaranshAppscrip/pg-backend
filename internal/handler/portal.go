@@ -212,8 +212,10 @@ func (h *PortalHandler) CreateMaintenance(c *gin.Context) {
 }
 
 type maintenanceUpdateRequest struct {
-	Status    string `json:"status"`
-	StaffNote string `json:"staff_note"`
+	Status     string  `json:"status"`
+	Priority   string  `json:"priority"`
+	AssignedTo *string `json:"assigned_to"`
+	StaffNote  string  `json:"staff_note"`
 }
 
 func (h *PortalHandler) UpdateMaintenance(c *gin.Context) {
@@ -227,7 +229,21 @@ func (h *PortalHandler) UpdateMaintenance(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	m, err := h.svc.UpdateMaintenance(c.Request.Context(), middleware.GetOrganizationID(c), id, domain.MaintenanceStatus(req.Status), req.StaffNote)
+	var assignedTo *uuid.UUID
+	if req.AssignedTo != nil && strings.TrimSpace(*req.AssignedTo) != "" {
+		aid, err := uuid.Parse(*req.AssignedTo)
+		if err != nil {
+			response.Error(c, apperror.BadRequest("invalid assigned_to"))
+			return
+		}
+		assignedTo = &aid
+	}
+	m, err := h.svc.UpdateMaintenance(c.Request.Context(), middleware.GetOrganizationID(c), id, service.MaintenanceUpdateInput{
+		Status: domain.MaintenanceStatus(req.Status),
+		Priority: domain.MaintenancePriority(req.Priority),
+		AssignedTo: assignedTo,
+		StaffNote: req.StaffNote,
+	})
 	if err != nil {
 		response.Error(c, err)
 		return

@@ -73,6 +73,8 @@ func New(deps Deps) *gin.Engine {
 			authRoutes.POST("/auth/tenant/login", h.TenantLogin)
 			authRoutes.POST("/auth/tenant/refresh", h.TenantRefresh)
 			authRoutes.POST("/auth/tenant/logout", h.TenantLogout)
+			authRoutes.POST("/auth/tenant/forgot-password", h.TenantForgotPassword)
+			authRoutes.POST("/auth/tenant/reset-password", h.TenantResetPassword)
 		}
 
 		staff := v1.Group("", middleware.StaffAuth(deps.Tokens))

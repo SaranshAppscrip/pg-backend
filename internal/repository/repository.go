@@ -194,7 +194,7 @@ type PortalRepository interface {
 	ListMaintenanceByTenant(ctx context.Context, orgID, tenantID uuid.UUID) ([]domain.MaintenanceRequest, error)
 	GetMaintenanceRequest(ctx context.Context, orgID, id uuid.UUID) (*domain.MaintenanceRequest, error)
 	CreateMaintenanceRequest(ctx context.Context, req *domain.MaintenanceRequest) error
-	UpdateMaintenanceRequest(ctx context.Context, orgID, id uuid.UUID, status domain.MaintenanceStatus, staffNote *string) (*domain.MaintenanceRequest, error)
+	UpdateMaintenanceRequest(ctx context.Context, orgID, id uuid.UUID, upd domain.MaintenanceUpdate) (*domain.MaintenanceRequest, error)
 
 	ListVisitorLog(ctx context.Context, orgID uuid.UUID, propertyID *uuid.UUID, limit int) ([]domain.VisitorLogEntry, error)
 	CreateVisitorEntry(ctx context.Context, entry *domain.VisitorLogEntry) error

@@ -240,3 +240,50 @@ Receipt ID: %s
 	)
 	return subject, emailLayout(subject, content, text)
 }
+
+func maintenanceAlertText(p MaintenanceAlertParams) string {
+	room := "—"
+	if p.RoomNumber != nil && *p.RoomNumber != "" {
+		room = *p.RoomNumber
+	}
+	return fmt.Sprintf(`Hello,
+
+%s reported a new maintenance request.
+
+Issue: %s
+Category: %s
+Room: %s
+
+Review and assign in Operations: %s
+
+— Nivas
+`, p.TenantName, p.Title, p.Category, room, p.OpsURL)
+}
+
+func maintenanceAlertHTML(p MaintenanceAlertParams) string {
+	room := "—"
+	if p.RoomNumber != nil && *p.RoomNumber != "" {
+		room = *p.RoomNumber
+	}
+	content := fmt.Sprintf(`
+<p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#3d3d3d;">Hello,</p>
+<p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#3d3d3d;">
+  <strong>%s</strong> reported a new maintenance request.
+</p>
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%%" style="margin:0 0 24px;background:#faf7f2;border:1px solid #e8e0d4;border-radius:8px;">
+  <tr><td style="padding:20px;">
+    <p style="margin:0 0 8px;font-size:15px;color:#3d3d3d;"><strong>Issue:</strong> %s</p>
+    <p style="margin:0 0 8px;font-size:15px;color:#3d3d3d;"><strong>Category:</strong> %s</p>
+    <p style="margin:0;font-size:15px;color:#3d3d3d;"><strong>Room:</strong> %s</p>
+  </td></tr>
+</table>
+%s`,
+		html.EscapeString(p.TenantName),
+		html.EscapeString(p.Title),
+		html.EscapeString(p.Category),
+		html.EscapeString(room),
+		ctaButton("Open Operations", html.EscapeString(p.OpsURL)),
+	)
+	subject := fmt.Sprintf("New maintenance request: %s", p.Title)
+	return emailLayout(subject, content, maintenanceAlertText(p))
+}

@@ -292,6 +292,15 @@ const (
 	MaintenanceClosed     MaintenanceStatus = "closed"
 )
 
+type MaintenancePriority string
+
+const (
+	MaintenancePriorityLow    MaintenancePriority = "low"
+	MaintenancePriorityMedium MaintenancePriority = "medium"
+	MaintenancePriorityHigh   MaintenancePriority = "high"
+	MaintenancePriorityUrgent MaintenancePriority = "urgent"
+)
+
 type MaintenanceRequest struct {
 	ID             uuid.UUID           `json:"id"`
 	OrganizationID uuid.UUID           `json:"organization_id"`
@@ -302,10 +311,20 @@ type MaintenanceRequest struct {
 	Title          string              `json:"title"`
 	Description    string              `json:"description"`
 	Status         MaintenanceStatus   `json:"status"`
+	Priority       MaintenancePriority `json:"priority"`
+	AssignedTo     *uuid.UUID          `json:"assigned_to"`
+	AssignedToName *string             `json:"assigned_to_name,omitempty"`
 	StaffNote      *string             `json:"staff_note"`
 	ResolvedAt     *time.Time          `json:"resolved_at"`
 	CreatedAt      time.Time           `json:"created_at"`
 	UpdatedAt      time.Time           `json:"updated_at"`
+}
+
+type MaintenanceUpdate struct {
+	Status     MaintenanceStatus
+	Priority   MaintenancePriority
+	AssignedTo *uuid.UUID
+	StaffNote  *string
 }
 
 type VisitorLogEntry struct {
@@ -318,9 +337,11 @@ type VisitorLogEntry struct {
 	RoomNumber     *string    `json:"room_number,omitempty"`
 	VisitorName    string     `json:"visitor_name"`
 	VisitorPhone   *string    `json:"visitor_phone"`
-	Purpose        *string    `json:"purpose"`
-	IDType         *string    `json:"id_type"`
-	IDNumber       *string    `json:"id_number"`
+	Purpose            *string `json:"purpose"`
+	IDType             *string `json:"id_type"`
+	IDNumber           *string `json:"id_number"` // masked display (last 4 only)
+	IDNumberEncrypted  *string `json:"-"`
+	IDNumberLast4      *string `json:"-"`
 	EntryAt        time.Time  `json:"entry_at"`
 	ExitAt         *time.Time `json:"exit_at"`
 	LoggedBy       *uuid.UUID `json:"logged_by"`
